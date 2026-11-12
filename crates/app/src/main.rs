@@ -1,6 +1,6 @@
 //! UDX710-TOOLS 启动入口。
 //!
-//! - 端口优先级：命令行参数 > `UDX_PORT` 环境变量 > `config.toml` > 默认 6677；
+//! - 端口优先级：命令行参数 > `UDX710_PORT`（历史别名 `UDX_PORT`）> `config.toml` > 默认 6677；
 //! - Tokio runtime 使用配置中的 `worker_threads` 上限（报告 5.3：
 //!   不未经测量强制单线程，也不默认放任多线程无限增长）；
 //! - D-Bus / oFono 不可用时以降级模式启动，行为与旧版一致；
@@ -99,9 +99,14 @@ fn apply_port_overrides(config: &mut AppConfig) {
             return;
         }
     }
-    if let Ok(v) = std::env::var("UDX_PORT") {
-        if let Ok(p) = v.parse::<u16>() {
-            config.port = p;
+    // packaging/start.sh 与 config.example.toml 声明的权威来源是 UDX710_PORT；
+    // 保留 UDX_PORT 作为历史别名，避免旧部署脚本静默失效。
+    for key in ["UDX710_PORT", "UDX_PORT"] {
+        if let Ok(v) = std::env::var(key) {
+            if let Ok(p) = v.parse::<u16>() {
+                config.port = p;
+                return;
+            }
         }
     }
 }

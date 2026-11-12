@@ -2,7 +2,7 @@
 #
 # 与旧版（Node + Vite + make 交叉编译）的区别：
 #   * 前端已改为纯静态 HTML5 / ES Modules，并在编译期由 rust-embed 内嵌进 server 二进制，
-#     因此前端与旧 C 后端都不再参与构建：无需 Node 工具链、无需前端打包、无需旧的 C 构建入口，
+#     因此前端与旧 C 后端都不再参与构建：无需前端打包、无需旧的 C 构建入口，
 #     交付物里没有 web/dist，整条构建链路只剩 cargo。
 #   * 体积优先的 release profile 已在仓库根 Cargo.toml 配置（技术报告第 09 章 9.5）：
 #       [profile.release]
@@ -12,11 +12,33 @@
 #       panic = "abort"
 #       strip = true
 #     交叉编译同样继承该 profile，命令行无需重复指定。
+#
+# 目标三元组选择（直接决定实机能否启动）：
+#   * 默认 aarch64-unknown-linux-musl：静态链接，产物不依赖设备 glibc 版本。
+#     实测设备为 Yocto + glibc 2.31，若用 ubuntu-latest 自带 aarch64-linux-gnu-gcc 链接，
+#     会要求 GLIBC_2.33/2.34 符号，加载器直接拒绝执行（历史踩坑）。
+#   * 备选 aarch64-unknown-linux-gnu + Linaro 7.5（最高 GLIBC_2.17），见文末注释块。
 name: Build UDX710 Tools
 
 on:
   push:
+    branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+      - "**/*.png"
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+      - "**/*.png"
   workflow_dispatch:
+
+# 同一 ref 的新构建取消旧构建，避免排队浪费额度。
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-arm:
@@ -31,6 +53,8 @@ jobs:
 
       - name: Install Rust stable toolchain
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
 
       # 缓存 cargo 注册表 / git 依赖 / 编译产物。
       # 宿主 cargo test 与 aarch64 交叉 build 都落在 target/ 下，一份缓存即可覆盖。
@@ -45,6 +69,16 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
+      # 格式与 lint 先作为观测门禁，避免历史代码一次性卡住发布；
+      # 待代码收敛后删除 continue-on-error，转为硬门禁。
+      - name: Format check (advisory)
+        continue-on-error: true
+        run: cargo fmt --all -- --check
+
+      - name: Clippy (advisory)
+        continue-on-error: true
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
       # 宿主（x86_64）运行全 workspace 测试，先于交叉编译暴露编译/单元测试问题。
       - name: Run workspace tests (host)
         run: cargo test --workspace
@@ -57,28 +91,25 @@ jobs:
         run: |
           python3 tests/contract/verify.py
           python3 tests/contract/parity.py
-          find web -name '*.js' -print0 | xargs -0 -n1 node --check
+          for f in $(find web -name '*.js'); do node --check "$f"; done
 
-      - name: Install aarch64 cross toolchain
+      # 静态 musl 交叉构建：镜像自带 aarch64-linux-musl-gcc，
+      # 可同时编译 rusqlite(bundled) 的 SQLite C 源码，产物无 glibc 依赖。
+      - name: Cross build static release binary (aarch64 musl)
         run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu
-          rustup target add aarch64-unknown-linux-gnu
+          docker run --rm -v "$PWD":/home/rust/src \
+            messense/rust-musl-cross:aarch64-musl \
+            build --release -p udx-app
 
-      - name: Cross build release binary (aarch64)
-        env:
-          # 交叉链接器：让 rustc 调用 aarch64 版 gcc 完成最终链接。
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
-          # rusqlite(bundled) 会编译 SQLite 的 C 源码，需要对应的交叉 C 编译器。
-          CC_aarch64_unknown_linux_gnu: aarch64-linux-gnu-gcc
-        run: cargo build --release --target aarch64-unknown-linux-gnu -p udx-app
-
-      # 把 udx-app 重命名为 server，连同启动脚本、systemd unit、部署说明一起打包。
+      # 把 udx-app 重命名为 server，连同启动脚本、supervisor 配置、部署说明一起打包。
       # 前端静态资源已内嵌进二进制，artifact 无需任何 web/ 文件。
       - name: Package artifact
         run: |
+          set -euo pipefail
+          BIN="target/aarch64-unknown-linux-musl/release/udx-app"
+          test -x "$BIN"
           mkdir -p dist/6677
-          cp target/aarch64-unknown-linux-gnu/release/udx-app dist/6677/server
+          cp "$BIN" dist/6677/server
           chmod 755 dist/6677/server
           cp packaging/start.sh dist/6677/start.sh
           chmod 755 dist/6677/start.sh
@@ -88,10 +119,65 @@ jobs:
           cp packaging/README.md dist/6677/README.md
           cp config.example.toml dist/6677/config.example.toml
           cp CHANGELOG.md dist/6677/CHANGELOG.md
+          # 静态链接校验：若出现 GLIBC_ 依赖说明退化为动态链接，需在设备侧重点验证。
+          file dist/6677/server || true
+          (readelf -d dist/6677/server 2>/dev/null | grep -E 'NEEDED|GLIBC' || true)
+          # 同时产出可校验归档，便于设备侧 sha256sum 比对与回滚归档。
+          tar -C dist -czf dist/udx710-tools-aarch64.tar.gz 6677
+          sha256sum dist/6677/server dist/udx710-tools-aarch64.tar.gz \
+            | tee dist/SHA256SUMS
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: udx710-tools-aarch64
-          path: dist/6677/
+          path: |
+            dist/6677/
+            dist/udx710-tools-aarch64.tar.gz
+            dist/SHA256SUMS
           if-no-files-found: error
+          # 历史问题：默认 90 天保留期导致旧构建拿不到二进制；30 天足够回溯且省配额。
+          retention-days: 30
+
+  # tag 推送（v*）时自动发 Release，解决 releases 为空、设备侧无法按版本检测更新。
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build-arm
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: udx710-tools-aarch64
+          path: dist
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          gh release create "$TAG" \
+            dist/udx710-tools-aarch64.tar.gz \
+            dist/SHA256SUMS \
+            --title "$TAG" \
+            --generate-notes \
+            || gh release upload "$TAG" \
+              dist/udx710-tools-aarch64.tar.gz dist/SHA256SUMS --clobber
+
+# ---------------------------------------------------------------------------
+# 备选：aarch64-unknown-linux-gnu + Linaro 7.5（GLIBC_2.17 上限）
+# 仅当设备必须动态链接系统库时启用。Linaro 官方 releases 路径已失效，
+# 工具链可从 S3 发布桶或 HF 镜像获取：
+#   gcc-linaro-7.5.0-2019.12-x86_64_aarch64-linux-gnu.tar.xz
+#
+#   - name: Cross build (gnu + linaro 7.5)
+#     env:
+#       CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+#       CC_aarch64_unknown_linux_gnu: aarch64-linux-gnu-gcc
+#     run: |
+#       rustup target add aarch64-unknown-linux-gnu
+#       cargo build --release --target aarch64-unknown-linux-gnu -p udx-app
+# ---------------------------------------------------------------------------

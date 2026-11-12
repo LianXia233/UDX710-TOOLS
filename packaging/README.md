@@ -192,3 +192,78 @@ chmod 755 /etc/init.d/udx710-tools
 - 正常 `SIGTERM` 优雅关闭会先停止监控线程，退出码为 0，**不会**触发重启。
 - 前端另有 `web/js/core/watchdog.js` 检测 UI 假死与后端失联，恢复后自动重建 WS / SSE。
 - 真机需验证一次人为假死场景下的 respawn 时延，避免重启风暴；原理见 `docs/WATCHDOG.md`。
+
+## 10. Yocto / 无 supervisor 设备（loader.sh + 外部看门狗）
+
+UDX710 实机为 Yocto 系统，**既没有 systemd 也没有 procd**：`/etc/init.d` 位于只读 squashfs，
+`crond` 仅以随包 `busybox-aarch64` 形式存在。此时第 4 节与第 9 节的两种 supervisor 都不可用，
+必须走设备自带的 `/home/root/loader.sh` 钩子。
+
+### 10.1 存储与自启事实（实测）
+
+```
+/dev/ubi0_userdata /mnt/userdata ubifs rw,ubi=0,vol=21
+overlay /home overlay rw,upperdir=/mnt/userdata/home/upper,workdir=/mnt/userdata/home/work
+overlay /var  overlay rw,upperdir=/mnt/userdata/var/upper,workdir=/mnt/userdata/var/work
+```
+
+- `/home` 与 `/var` 都是 overlay，可写层落在 `ubi0_21`（userdata 卷），**断电重启后保留**。
+- `/etc` 为 squashfs 只读，无法新增 init 脚本，`/etc/init.d` 不可写。
+- 现有开机链路：`/home/root/loader.sh` → `busybox-aarch64 crond` + `6677/start.sh` + `ttyd/start.sh`。
+  多次重启实测该脚本均被执行（crond / server / ttyd 全部由它拉起），是设备上唯一可用的自启钩子。
+
+### 10.2 推荐组合：内建 watchdog + 外部 shell 看门狗
+
+| 层 | 职责 | 配置 |
+| --- | --- | --- |
+| `server` 内建 `[watchdog]` | runtime 假死 → `exit(75)` | `action = "exit"` |
+| `/home/root/6677/panel_watchdog.sh` | 进程缺失 / 端口未监听 / HTTP 无响应 → 重启 | 10 秒周期、连续 2 次失败、30 秒冷却、20 秒启动宽限 |
+| `/home/root/loader.sh` 末尾 | 开机拉起看门狗并重建 crontab | 复用原脚本的 `$DIR` 变量，不新增硬编码路径 |
+| `/var/spool/cron/crontabs/root` | 每分钟兜底 | 脚本单例拦截，已有常驻实例则立即退出 |
+
+两层互补：内建 watchdog 处理「runtime 卡死」，外部脚本处理「进程消失 / 端口未监听 / 整机重启后未自启」。
+外部脚本的探活目标是静态首页 `/`，不请求 `/api/info`，避免探活本身触发 oFono/AT 查询。
+
+### 10.3 部署步骤（A/B 灰度）
+
+```sh
+# 0) 控制机侧校验产物
+sha256sum -c SHA256SUMS
+file server                      # 期望 ARM aarch64 且 statically linked
+
+# 1) 上传到临时目录，先不动运行文件
+mkdir -p /tmp/udx-new
+cp server /tmp/udx-new/ && chmod 755 /tmp/udx-new/server
+
+# 2) 灰度：换端口独立试跑，6677 继续对外服务
+cd /tmp/udx-new
+UDX710_PORT=6678 ./server > /tmp/udx-6678.log 2>&1 &
+
+# 3) 健康与接口冒烟
+curl -s http://127.0.0.1:6678/api/health
+curl -s http://127.0.0.1:6678/api/info | head -c 200
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:6678/
+# 观察 10 秒：ps 状态应为 S，/proc/<pid>/stat 的 utime/stime 不再快速递增
+
+# 4) 切换（保留回滚点）
+cd /home/root/6677
+cp server server.bak
+kill <6678 实例 pid>
+cp /tmp/udx-new/server ./server && chmod 755 ./server
+./start.sh &                     # 无 supervisor 时也可交给外部看门狗在 ≤20 秒内拉起
+
+# 5) 回滚
+cp server.bak server && kill $(pidof server); ./start.sh &
+```
+
+注意：`server` 与前端是同一个二进制（`rust-embed` 内嵌），**前端变更同样需要重新部署 server**，
+不存在单独替换 `web/` 的热更路径。
+
+### 10.4 验收清单
+
+- `curl -s http://127.0.0.1:6677/api/health` 返回 `status:"ok"` 且 `watchdog.stalled` 为 `false`。
+- 静态首页、`/api/auth/status`、`/api/info` 均 200；旧版 85 条以上路由抽检通过。
+- `ps` 中 server 状态为 S；记录 `/proc/<pid>/status` 的 `VmRSS` 作为后续对比基线。
+- 人为 `kill` server，确认外部看门狗在 20 秒内拉起（日志出现 `restart begin/done`）。
+- 人为阻塞 D-Bus 制造假死，确认内建 watchdog 以退出码 75 结束进程并被外部脚本拉起。
+- 重启设备后确认 `/home/root/6677/panel_watchdog.sh` 由 `loader.sh` 拉起，crontab 内容已重建。

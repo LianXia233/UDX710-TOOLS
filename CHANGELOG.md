@@ -28,6 +28,13 @@
 - 原始 v2.x 实现仍可从 git 历史查阅 / 回退；`parity.py` 对照结论不变（PASS，零遗漏），`verify.py` 仍 PASS（95 端点 / 90 条 C 路由全命中）。
 - 报告要求的真机验收（阶段 8）尚未完成；本次为代码层清理，不代表真机指标达标。
 
+### Changed（2026-11-13 构建与部署优化）
+
+- **修复端口环境变量失效**：`crates/app/src/main.rs` 的 `apply_port_overrides` 原先只读 `UDX_PORT`，而 `packaging/start.sh`、`packaging/README.md`、`config.example.toml` 均声明 `UDX710_PORT` 为权威来源，导致 `UDX710_PORT=8080 ./start.sh` 时环境变量被静默忽略、仅靠位置参数兜底。现按 `UDX710_PORT` → `UDX_PORT`（历史别名）依次尝试，位置参数仍保持最高优先级。
+- **CI 交叉编译改为 musl 静态**：`.github/workflows/build.yml` 的目标三元组由 `aarch64-unknown-linux-gnu` 改为 `aarch64-unknown-linux-musl`，改用 `messense/rust-musl-cross:aarch64-musl` 镜像构建，产物不依赖设备 glibc。原因：实机为 Yocto + glibc 2.31，用 ubuntu-latest 自带 `aarch64-linux-gnu-gcc` 链接会要求 `GLIBC_2.33/2.34` 符号，加载器直接拒绝执行。原 gnu + Linaro 7.5（`GLIBC_2.17` 上限）方案保留为注释备选。
+- **CI 产物与发布流程**：artifact 增加 `retention-days: 30`（原默认 90 天，超期后旧构建无法回溯）；新增 `SHA256SUMS` 与 `udx710-tools-aarch64.tar.gz` 归档，便于设备侧 `sha256sum` 校验；新增 tag（`v*`）触发的 Release job，解决 releases 为空、设备侧无法按版本检测更新；`push` 增加 `branches: [main]` 与 `paths-ignore`（文档与截图改动不再触发构建）；新增 `concurrency` 自动取消同 ref 的重复构建；`cargo fmt` 与 `clippy` 以 `continue-on-error` 观测门禁形式引入，待代码收敛后转为硬门禁。
+- **产物静态链接自检**：打包阶段执行 `file` 与 `readelf -d`，若出现 `GLIBC_` 依赖即在日志中暴露，避免把动态链接产物误发到 glibc 不匹配的设备。
+
 ---
 
 ## [3.1.0] - 2026-11-13
