@@ -98,7 +98,10 @@
 └── packaging/                  # start.sh、systemd unit、procd init、部署说明
 ```
 
-`src/`（旧 C 源码）与 `web/src/`（旧 Vue 源码）、`web/package.json` / `vite.config.js` 等属于历史实现，`3.x` 构建不再使用。
+v2.x 旧实现（`src/` C 源码、`web/src/` Vue 源码、`web/package.json` / `package-lock.json` / Vite / Tailwind / PostCSS 配置，
+以及 vendored 的 `bin/` `include/` `lib/` `share/` 工具链）已从仓库**删除**，仓库只保留重构后的文件。
+功能基线固化在 `tests/contract/v2_baseline.json`（含来源 commit 与旧源码合并 sha256），对照脚本仍可复跑；
+如需查阅原始代码请回到 git 历史。
 
 ## 快速开始（部署）
 

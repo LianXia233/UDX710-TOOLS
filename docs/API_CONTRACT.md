@@ -5,7 +5,7 @@
 - 机器可读清单：`tests/contract/api_endpoints.json`（95 条，每条 7 字段）
 - 静态校验：`python3 tests/contract/verify.py`（用法见 `tests/README.md`）
 - 安全对照：`docs/SECURITY.md`（报告第 08 章 8 个观察点）
-- 数据源：`src/handlers/http_server.c`（路由表与 `is_auth_whitelist`）、`src/handlers/handlers.c` / `src/system/*.c`（请求/响应字段）、`web/src/composables/useApi.js`（前端调用约定）、技术报告第 08 / 11 章。
+- 数据源：`tests/contract/v2_baseline.json`（v2.x 基线快照，提取自 `src/handlers/http_server.c` 的路由表与 `is_auth_whitelist`、`src/handlers/handlers.c` / `src/system/*.c` 的请求响应字段、`web/src/composables/useApi.js` 的前端调用约定；旧源码已删除，原始实现见 git 历史 `3a6c5f1`）、技术报告第 08 / 11 章。
 
 > 契约是**兼容目标 + 加固设计**的结合：路径与字段尽量保持旧版以便前端平滑迁移，认证/权限/响应语义则按第 08 章结论收紧。
 

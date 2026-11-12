@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
 """功能移植对照校验（可复跑）。
 
-从工作区保留的旧版源码（v2.x 存档：`src/`、`web/src/`）提取
-  (a) C 后端 `mg_str("/api/...")` 路由
-  (b) Vue 组件调用的 `/api/...` 端点
-  (c) Vue 组件 / 菜单页清单
+v2.x 旧 C/Vue 源码已从本仓库删除；基线固化在
+`tests/contract/v2_baseline.json`（含来源 commit 与旧源码合并 sha256，
+生成时从 `src/handlers/http_server.c`、`web/src/components/*.vue`、
+`web/src/App.vue` 提取）。本脚本对照：
 
-再与新实现（`tests/contract/api_endpoints.json`、`crates/api/src/routes.rs`、
-`web/js/pages/`、`web/js/app.js`）逐项对照，任何遗漏即 FAIL。
+  (a) 旧 C 后端 `mg_str("/api/...")` 路由
+  (b) 旧 Vue 组件调用的 `/api/...` 端点
+  (c) 旧 Vue 组件 -> 新页面/组件映射
+  (d) 旧菜单项 -> 新页面
+
+与新实现（`tests/contract/api_endpoints.json`、`crates/api/src/routes.rs`、
+`web/js/pages/`、`web/js/app.js`）逐项比对，任何遗漏即 FAIL。
 
 用法：python3 tests/contract/parity.py
 """
@@ -19,6 +24,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+BASELINE = ROOT / "tests/contract/v2_baseline.json"
 
 # 旧版组件 -> 新版页面/组件（功能级映射，非仅端点）
 PAGE_MAP = {
@@ -74,22 +80,39 @@ def norm(path: str) -> str:
     return p
 
 
+def load_baseline() -> dict:
+    """读取并校验基线快照，避免快照损坏/被清空导致门禁假通过。"""
+    if not BASELINE.is_file():
+        raise SystemExit(f"FAIL: 基线快照缺失: {BASELINE}")
+    data = json.loads(BASELINE.read_text(encoding="utf-8"))
+    if data.get("schema") != 1:
+        raise SystemExit("FAIL: 基线快照 schema 版本不匹配")
+    for key in ("c_routes", "vue_endpoints", "vue_components", "menu_ids"):
+        value = data.get(key)
+        if not isinstance(value, list) or not value:
+            raise SystemExit(f"FAIL: 基线快照字段为空或格式错误: {key}")
+    src = data.get("source", {})
+    if not src.get("old_source_sha256") or not src.get("old_code_last_commit"):
+        raise SystemExit("FAIL: 基线快照缺少来源 commit / sha256，无法追溯")
+    if any(not p.startswith("/api/") for p in data["c_routes"] + data["vue_endpoints"]):
+        raise SystemExit("FAIL: 基线快照含非法端点")
+    return data
+
+
 def main() -> int:
     failures: list[str] = []
+    baseline = load_baseline()
+    src = baseline["source"]
 
-    # ---- 旧版素材 ----
-    c_src = (ROOT / "src/handlers/http_server.c").read_text(encoding="utf-8", errors="replace")
-    c_routes = set(re.findall(r'mg_str\("(/api/[^"]+)"\)', c_src))
-    vue_files = sorted((ROOT / "web/src/components").rglob("*.vue"))
-    vue_endpoints: set[str] = set()
-    for f in vue_files:
-        text = f.read_text(encoding="utf-8", errors="replace")
-        for m in re.findall(r"/api/[A-Za-z0-9_/:.$%?=&{}-]+", text):
-            p = norm(m)
-            if p.startswith("/api/") and len(p) > 5 and p not in IGNORED:
-                vue_endpoints.add(p)
-    app_vue = (ROOT / "web/src/App.vue").read_text(encoding="utf-8", errors="replace")
-    menu_ids = set(re.findall(r"\{\s*id:\s*'([a-zA-Z0-9_]+)'", app_vue))
+    c_routes = set(baseline["c_routes"])
+    vue_endpoints = set(baseline["vue_endpoints"])
+    vue_components = set(baseline["vue_components"])
+    menu_ids = set(baseline["menu_ids"])
+
+    print("基线快照: tests/contract/v2_baseline.json")
+    print(f"  来源 commit {src['old_code_last_commit'][:12]} | 旧源码 {src['old_file_count']} 文件 | sha256 {src['old_source_sha256'][:16]}…")
+    print(f"  旧源码已删除，本快照为功能对照唯一基线（生成于 HEAD {src['snapshot_created_at_head'][:12]}）")
+    print("-" * 72)
 
     # ---- 新版素材 ----
     contract = json.loads((ROOT / "tests/contract/api_endpoints.json").read_text(encoding="utf-8"))
@@ -123,15 +146,13 @@ def main() -> int:
 
     # ---- (c) 旧 Vue 组件 -> 新页面 ----
     comp_miss = []
+    # 双向核对：映射表不得虚构旧组件，也不得漏掉快照里的旧组件
+    for comp in sorted(vue_components - PAGE_MAP.keys()):
+        comp_miss.append(f"{comp}(未建立映射)")
+    for comp in sorted(PAGE_MAP.keys() - vue_components):
+        comp_miss.append(f"{comp}(映射表多出/基线无此组件)")
     for comp, target in PAGE_MAP.items():
-        targets = [t.strip() for t in target.replace("+", " + ").split(" + ")]
-        if not (ROOT / "web/src/components" / comp).exists() and not any(
-            (ROOT / "web/src/components/plugin" / comp).exists() for _ in [0]
-        ):
-            # 组件可能位于 plugin/ 子目录
-            if not (ROOT / "web/src/components/plugin" / comp).exists():
-                comp_miss.append(f"{comp}(旧文件缺失)")
-                continue
+        targets = [t.strip() for t in target.split(" + ")]
         ok = all(
             (ROOT / "web/js/pages" / t).exists()
             or (ROOT / "web/js/components" / t).exists()
@@ -143,12 +164,16 @@ def main() -> int:
         if not ok:
             comp_miss.append(f"{comp} -> {target}")
     print("(c) 旧 Vue 组件 -> 新页面/组件")
-    print(f"    映射 {len(PAGE_MAP)} 项 | 缺失 {len(comp_miss)} 项 {comp_miss or '（无）'}")
+    print(f"    基线组件 {len(vue_components)} 个 / 映射 {len(PAGE_MAP)} 项 | 缺失 {len(comp_miss)} 项 {comp_miss or '（无）'}")
     if comp_miss:
         failures.append(f"组件映射缺失: {comp_miss}")
 
     # ---- (d) 旧菜单 -> 新页面 ----
     menu_miss = []
+    for mid in sorted(menu_ids - MENU_MAP.keys()):
+        menu_miss.append(f"{mid}(未建立映射)")
+    for mid in sorted(MENU_MAP.keys() - menu_ids):
+        menu_miss.append(f"{mid}(映射表多出/基线无此菜单)")
     for mid, target in MENU_MAP.items():
         for t in target.split("+"):
             f = f"{t}.js" if not t.endswith(".js") else t

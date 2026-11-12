@@ -2,6 +2,8 @@
 
 本文件把《UDX710-TOOLS Rust + 原生前端 Html5 详细技术报告》第 08 章「安全审计：重构前应先修复的问题」的 **8 个观察点**，与旧 C 实现逐一对照，给出「等级 / 原问题 / 本次修复 / 验证方式 / 残留风险」五栏结论，作为 Rust + Axum 重构实现与验收的对照基线。端点级约束另见 `docs/API_CONTRACT.md`，机器清单见 `tests/contract/api_endpoints.json`。
 
+> **源码位置说明**：下文引用的 `src/handlers/http_server.c`、`src/handlers/handlers.c`、`src/include/lib/http_utils.h` 等路径与行号，均为 **v2.x 已删除源码**的历史位置；原始实现可在 git 历史（如 `3a6c5f1`）查阅，路由 / 端点 / 组件基线已固化在 `tests/contract/v2_baseline.json`。
+
 > **审查边界**：以下结论来自静态源码审查，等价于风险清单与修复设计，并不等于已在真机上完成利用验证；每一项都必须在第 11 章测试验收中复核（见 `tests/README.md`）。
 
 > **用户明确覆盖指令**：报告第 3 项原建议为「取消 Web 任意 Shell，或严格限制为管理员诊断功能」。本项目用户要求 **保留 Web 任意 Shell**。因此该项处置不是删除功能，而是把「内部设备动作」与「Web 任意 Shell 诊断通道」彻底分离，并对后者施加一整组强制约束。详见 §3。

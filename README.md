@@ -76,7 +76,11 @@ examples/plugins/           Sample plugin using the new protocol
 packaging/                  start.sh, systemd unit, procd init, deployment notes
 ```
 
-Legacy `src/` (C) and `web/src/` (Vue), `web/package.json`, `vite.config.js` are historical and unused by 3.x builds.
+The v2.x legacy sources (`src/` C, `web/src/` Vue, `web/package.json` / `package-lock.json`,
+Vite / Tailwind / PostCSS configs) and the vendored `bin/ include/ lib/ share/` toolchain have been
+**removed from the repository** — only the rewritten 3.x code remains. The functional baseline is
+frozen in `tests/contract/v2_baseline.json` (source commit + combined sha256) so `verify.py` and
+`parity.py` stay reproducible; the original code is still available in git history.
 
 ## Deploy
 

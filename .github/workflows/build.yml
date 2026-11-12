@@ -50,8 +50,9 @@ jobs:
         run: cargo test --workspace
 
       # 契约 + 功能移植对照 + 前端语法，作为发布前的可复跑门禁。
-      # parity.py 读取仓库中保留的 v2.x 旧源码（src/、web/src/）逐项比对，
-      # 任何旧路由 / 组件 / 菜单未被新实现覆盖即 FAIL。
+      # v2.x 旧 C/Vue 源码已删除；两个脚本读取 tests/contract/v2_baseline.json
+      # （含来源 commit 与旧源码合并 sha256）作为唯一基线，可在浅克隆中稳定运行，
+      # 任何旧路由 / 端点 / 组件 / 菜单未被新实现覆盖即 FAIL。
       - name: Verify contract, feature parity and frontend syntax
         run: |
           python3 tests/contract/verify.py

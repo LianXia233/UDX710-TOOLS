@@ -6,6 +6,30 @@
 
 ---
 
+## [Unreleased]
+
+仓库清理：只保留重构后的实现，v2.x 旧源码与旧构建链全部移出工作树。
+
+### Removed
+
+- 删除旧 C 后端 `src/`（61 文件）、旧 Vue3 前端 `web/src/`（39 文件）、`web/package.json` / `package-lock.json` / `vite.config.js` / `tailwind.config.js` / `postcss.config.js`。
+- 删除 vendored 工具链 `bin/` / `include/` / `lib/` / `share/`（852 文件，旧 C 构建的 GLib / Mongoose 依赖）。
+- 删除旧插件文档与示例：`docs/PLUGIN_GUIDE.md`、`docs/插件开发指南2.0.md`、`docs/default_plugin.js`、`docs/example_system_toolkit.js`（描述已废弃的 Vue 动态模板插件）。
+- 合计删除 **961 个文件 / 465,698 行**；`LICENSE`、历史界面截图与二维码等非源码资源保留。
+
+### Changed
+
+- **基线快照化**：新增 `tests/contract/v2_baseline.json`，固化 91 条 C 路由、90 条 `mg_match` 有效路由 + 1 条注释路由、37 个前端端点、27 个组件、16 个菜单项，附来源 commit `3a6c5f1` 与 100 个旧源码文件的合并 sha256。
+- `verify.py` / `parity.py` 改为读取该快照，不再依赖已删除的旧源码；两者均新增快照完整性校验（schema、非空、sha256），空基线直接 FAIL，避免门禁假通过。
+- 同步 `build.yml` 注释、`docs/FEATURE_PARITY.md`、`docs/MIGRATION.md`、`docs/API_CONTRACT.md`、`docs/SECURITY.md`、`tests/README.md`、中英 README 中关于旧源码位置的表述。
+
+### Notes
+
+- 原始 v2.x 实现仍可从 git 历史查阅 / 回退；`parity.py` 对照结论不变（PASS，零遗漏），`verify.py` 仍 PASS（95 端点 / 90 条 C 路由全命中）。
+- 报告要求的真机验收（阶段 8）尚未完成；本次为代码层清理，不代表真机指标达标。
+
+---
+
 ## [3.1.0] - 2026-11-13
 
 本版在 3.0.0 全量重构基础上，补齐**界面表现层**与**运行时自愈能力**，并同步文档。功能完整性已用可复跑脚本逐项核对，详见 [docs/FEATURE_PARITY.md](docs/FEATURE_PARITY.md)。

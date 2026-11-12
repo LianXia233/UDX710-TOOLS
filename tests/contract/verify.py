@@ -9,8 +9,9 @@ UDX710-TOOLS API 契约静态校验脚本（纯 Python 3 标准库，无第三�
 校验项：
   (a) tests/contract/api_endpoints.json 中 path 唯一；每条含 path / methods /
       auth / permission / request / response / notes 七个字段；
-  (b) 从 src/handlers/http_server.c 用正则提取所有
-      mg_match(hm->uri, mg_str("..."), NULL) 的 URI，把 /* 归一化为 /:id，
+  (b) 从 tests/contract/v2_baseline.json 读取 v2.x C 后端的
+      mg_match(hm->uri, mg_str("..."), NULL) 路由基线（旧源码已删除，
+      快照含来源 commit 与合并 sha256），把 /* 归一化为 /:id，
       逐个确认能在契约中找到对应条目。契约里的 Axum 占位符
       (/:id /:name /:service_id /:rule_id) 统一归一化为 /:id 以便跨命名比对。
       允许 GET / POST 共用同一 path（按归一化 path 集合比对，天然支持）。
@@ -34,13 +35,8 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent          # <root>/tests/contract
 ROOT = HERE.parent.parent                       # <root>
 CONTRACT_FILE = HERE / "api_endpoints.json"
-C_SOURCE_FILE = ROOT / "src" / "handlers" / "http_server.c"
-
-# 匹配 mg_match(hm->uri, mg_str("..."), NULL)；\s* 允许源码跨行书写
-# （例如 /api/security/reset-password 的 mg_str 与 NULL 分在两行）。
-ROUTE_RE = re.compile(
-    r'mg_match\(\s*hm->uri\s*,\s*mg_str\(\s*"([^"]+)"\s*\)\s*,\s*NULL\s*\)'
-)
+# v2.x 旧 C/Vue 源码已删除，路由/端点/组件/菜单基线固化在本快照中
+BASELINE_FILE = HERE / "v2_baseline.json"
 
 # 写方法集合；WebSocket 交互式终端按任务要求计入写接口
 WRITE_METHODS = {"POST", "PUT", "DELETE", "PATCH", "WS"}
@@ -120,24 +116,6 @@ def classify(path: str) -> str:
     return "其他"
 
 
-def extract_c_routes(text: str):
-    """返回 (active_uris, commented_uris)。容错：忽略被 // 注释掉的路由。"""
-    active, commented = [], []
-    for m in ROUTE_RE.finditer(text):
-        uri = m.group(1)
-        line_start = text.rfind("\n", 0, m.start()) + 1
-        line_end = text.find("\n", m.start())
-        if line_end == -1:
-            line_end = len(text)
-        line = text[line_start:line_end].lstrip()
-        # 以 // 或 /* 或 * 开头视为注释行（块注释内的行常以 * 开头）
-        if line.startswith("//") or line.startswith("/*") or line.startswith("*"):
-            commented.append(uri)
-        else:
-            active.append(uri)
-    return active, commented
-
-
 def disp_width(s: str) -> int:
     """终端显示宽度：中文等全角字符按 2 计。"""
     return sum(2 if ord(ch) > 127 else 1 for ch in s)
@@ -157,9 +135,19 @@ def main() -> int:
         print("无法读取契约文件 %s: %s" % (CONTRACT_FILE, exc))
         return 1
     try:
-        c_text = C_SOURCE_FILE.read_text(encoding="utf-8", errors="replace")
-    except OSError as exc:
-        print("无法读取 C 路由源 %s: %s" % (C_SOURCE_FILE, exc))
+        baseline = json.loads(BASELINE_FILE.read_text(encoding="utf-8"))
+        c_active = baseline["c_mg_routes_active"]
+        c_commented = baseline["c_mg_routes_commented"]
+        baseline_src = baseline["source"]
+    except (OSError, json.JSONDecodeError, KeyError) as exc:
+        print("无法读取 v2.x 基线快照 %s: %s" % (BASELINE_FILE, exc))
+        return 1
+    # 空基线必须拒绝，避免门禁在快照损坏时被"假通过"
+    if (not isinstance(c_active, list) or not c_active
+            or not isinstance(c_commented, list)
+            or baseline.get("schema") != 1
+            or not baseline_src.get("old_source_sha256")):
+        print("v2.x 基线快照内容不完整或 schema 不匹配，拒绝放行")
         return 1
 
     # ---- (a) path 唯一 + 字段完整性 + auth 取值 ----
@@ -176,8 +164,7 @@ def main() -> int:
         if e.get("auth") not in VALID_AUTH:
             errors.append("(a) 第 %d 条 auth 取值非法: %s" % (i, e.get("auth")))
 
-    # ---- (b) C 路由覆盖 ----
-    c_active, c_commented = extract_c_routes(c_text)
+    # ---- (b) C 路由覆盖（基线来自快照）----
     c_norm_set = sorted({normalize(u) for u in c_active})
     contract_norm = {}
     for e in endpoints:
@@ -237,7 +224,11 @@ def main() -> int:
     print(" UDX710-TOOLS API 契约静态校验")
     print(line)
     print(" 契约文件   : %s" % CONTRACT_FILE.relative_to(ROOT))
-    print(" C 路由源   : %s" % C_SOURCE_FILE.relative_to(ROOT))
+    print(" 基线快照   : %s" % BASELINE_FILE.relative_to(ROOT))
+    print(" 基线来源   : commit %s | 旧源码 %s 文件 | sha256 %s…"
+          % (baseline_src["old_code_last_commit"][:12],
+             baseline_src["old_file_count"],
+             baseline_src["old_source_sha256"][:16]))
     print(" 契约端点数 : %d" % len(endpoints))
     print(" C 有效路由 : %d (归一化去重后 %d)"
           % (len(c_active), len(c_norm_set)))

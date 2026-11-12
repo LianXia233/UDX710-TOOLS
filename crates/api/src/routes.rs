@@ -1,4 +1,4 @@
-//! 全量路由表：与旧版 `src/handlers/http_server.c` 的 mg_match 一一对应。
+//! 全量路由表：与 v2.x C 后端 `http_server.c` 的 mg_match 一一对应（旧源码已删除，基线见 `tests/contract/v2_baseline.json`）。
 //!
 //! 路径、方法与 JSON 语义保持兼容；新增 `/api/health`、`/api/events`、
 //! `/api/ws`、`/api/terminal/ws`、`/api/audit/logs` 属于重构增强。

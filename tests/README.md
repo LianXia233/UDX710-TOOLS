@@ -25,7 +25,7 @@ echo $?
 | 项 | 内容 |
 | --- | --- |
 | (a) | `api_endpoints.json` 中 `path` 唯一；每条含 7 个规定字段；`auth` 取值合法（`required` / `public` / `public-get`） |
-| (b) | 从 `src/handlers/http_server.c` 正则提取所有 `mg_match(hm->uri, mg_str("..."), NULL)` 的 URI，把 `/*` 归一化为 `/:id`，逐个确认能在契约中找到对应条目；契约里的 Axum 占位符 `/:id`、`/:name`、`/:service_id`、`/:rule_id` 统一归一化为 `/:id` 以便跨命名比对；**允许 GET / POST 共用同一 path** |
+| (b) | 从 `tests/contract/v2_baseline.json` 读取 v2.x 所有 `mg_match(hm->uri, mg_str("..."), NULL)` 的 URI，把 `/*` 归一化为 `/:id`，逐个确认能在契约中找到对应条目；契约里的 Axum 占位符 `/:id`、`/:name`、`/:service_id`、`/:rule_id` 统一归一化为 `/:id` 以便跨命名比对；**允许 GET / POST 共用同一 path** |
 | (c) | 所有写接口（POST / PUT / DELETE / WS）`auth` 不为 `public`，且 `/api/device_control` 必须 `auth=required` |
 
 ### 输出内容
@@ -34,7 +34,7 @@ echo $?
 
 ### 两个必须理解的容错 / 例外
 
-1. **注释路由容错**：`http_server.c` 中 `// else if (mg_match(... "/api/apn" ...))` 是旧版注释掉的 APN 管理路由。脚本按行判断并跳过，单独列为「C 注释路由」，不作为覆盖失败。契约仍保留 `/api/apn`，作为前端 `useApi.js` 中 `getApnList()` / `setApnConfig()` 的兼容别名，见输出的「注释路由的兼容别名条目」。
+1. **注释路由容错**：基线快照中（原 `http_server.c`） `// else if (mg_match(... "/api/apn" ...))` 是旧版注释掉的 APN 管理路由。脚本按行判断并跳过，单独列为「C 注释路由」，不作为覆盖失败。契约仍保留 `/api/apn`，作为前端 `useApi.js` 中 `getApnList()` / `setApnConfig()` 的兼容别名，见输出的「注释路由的兼容别名条目」。
 2. **协议豁免的公开写入口**：登录与忘记密码恢复流程在协议上必须免认证，否则设备无法登录或恢复。脚本用 `PUBLIC_WRITE_EXEMPT` 显式列出 3 个入口并单独打印：`/api/auth/login`、`/api/security/verify`、`/api/security/reset-password`。除此之外任何写接口标 `public` 即判失败。`public-get` 的语义是「仅 GET 免认证，其余方法仍需认证」，因此含写方法的 `public-get` 端点（如 `/api/charge/config`）视为合规。
 
 ### 契约文件结构（api_endpoints.json）
@@ -53,7 +53,7 @@ echo $?
 
 ### 数据来源
 
-`src/handlers/http_server.c`（完整路由表与 `is_auth_whitelist`）、`src/handlers/handlers.c` 与 `src/system/*.c`（请求/响应字段与安全实现）、`web/src/composables/useApi.js`（前端调用约定）、技术报告第 08 / 11 章。
+`tests/contract/v2_baseline.json`（v2.x 基线快照：完整路由表、`mg_match` 有效/注释路由、前端端点、组件、菜单，含来源 commit 与旧源码合并 sha256）；旧源码 `src/`、`web/src/` 已从工作树删除，原始实现可在 git 历史（`3a6c5f1`）查阅。技术报告第 08 / 11 章。
 
 ## 1.5 功能移植对照（parity.py）
 
@@ -62,7 +62,7 @@ python3 tests/contract/verify.py     # API 契约：端点 / 认证 / 旧 C 路�
 python3 tests/contract/parity.py     # 功能完整性：旧版功能是否全部移植
 ```
 
-`parity.py` 从仓库中保留的 v2.x 旧源码（`src/handlers/http_server.c`、`web/src/components/*.vue`、`web/src/App.vue`）提取四类基线，逐项与新实现对照：
+`parity.py` 从 `tests/contract/v2_baseline.json` 读取四类基线（旧源码已删除，快照含来源 commit 与合并 sha256），逐项与新实现对照：
 
 | 项 | 基线 | 新实现 | 当前结果 |
 | --- | --- | --- | --- |
@@ -73,7 +73,7 @@ python3 tests/contract/parity.py     # 功能完整性：旧版功能是否全�
 
 纯 Python 3 标准库，无第三方依赖。已知非端点占位符（如 `/api/webhooks/YOUR_WEBHOOK`）在 `IGNORED` 中显式排除，通配 `/*` 按 `/:id` 归一化比对。
 
-> 这两个脚本与 `cargo test --workspace` 已同时纳入 `.github/workflows/build.yml` 的发布门禁。**删除旧版 `src/` / `web/src/` 存档前**，需先为 `parity.py` 指定基线来源，否则对照脚本会失去基线。
+> 这两个脚本与 `cargo test --workspace` 已同时纳入 `.github/workflows/build.yml` 的发布门禁。**v2.x 旧源码已从仓库删除**；基线固化为 `tests/contract/v2_baseline.json`（来源 commit `3a6c5f1`、100 个旧源码文件的合并 sha256 `bb4c963ebcaf0847…`）。两个脚本都校验快照 schema / 非空 / sha256，空基线或损坏快照直接 FAIL，避免门禁假通过；脚本不再读取任何已删除的旧源码路径，可在浅克隆 CI 中稳定运行。
 
 ## 2. Rust 侧测试（cargo test --workspace）
 
@@ -96,7 +96,7 @@ cargo test -p udx-api                      # 只跑单个 crate
 
 ## 3. 前端手工验收清单
 
-基于 `web/src/composables/useApi.js` 的调用约定，逐页在浏览器（桌面 + 移动）手工勾选：
+基于 v2.x `useApi.js` 的调用约定（见基线快照 / git 历史），逐页在浏览器（桌面 + 移动）手工勾选：
 
 - [ ] 登录：正确密码拿到 Token；错误密码返回 401 且清空本地 Token；连续失败触发限速
 - [ ] 登录状态：`/api/auth/status` 返回 `authenticated`；前端同时兼容旧字段 `logged_in`（两者为 false 时清除本地 Token）

@@ -7,7 +7,7 @@ python3 tests/contract/parity.py     # 结果: PASS
 python3 tests/contract/verify.py     # API 契约: PASS（95 端点 / 90 条 C 路由全命中）
 ```
 
-> 旧版源码（`src/`、`web/src/`、`lib/`、`bin/`）作为 **v2.x 存档**保留在仓库中，仅用于对照，不参与 v3 构建。v3 的实现位于 `crates/`、`web/js/`、`web/css/`，CI 只构建 Rust workspace。
+> v2.x 旧源码（`src/`、`web/src/`）与 vendored 工具链（`lib/`、`bin/`、`include/`、`share/`）已从仓库**删除**，仓库只保留重构后的实现。功能基线固化为 `tests/contract/v2_baseline.json`，含来源 commit `3a6c5f1`、100 个旧源码文件的合并 sha256，以及 91 条 C 路由 / 90 条有效 `mg_match` 路由 / 37 个前端端点 / 27 个组件 / 16 个菜单项。两个对照脚本只读该快照，不依赖已删除文件；原始实现仍可从 git 历史查阅。v3 实现位于 `crates/`、`web/js/`、`web/css/`，CI 只构建 Rust workspace。
 
 ---
 
@@ -15,7 +15,7 @@ python3 tests/contract/verify.py     # API 契约: PASS（95 端点 / 90 条 C �
 
 | 维度 | 旧版（C / Mongoose） | 新版（Rust / Axum） | 结论 |
 | --- | --- | --- | --- |
-| 路由定义 | `src/handlers/http_server.c` 中 91 条 `mg_str("/api/...")` | `crates/api/src/routes.rs` 84 条 `.route(...)` + `tests/contract/api_endpoints.json` 95 个端点 | **全覆盖** |
+| 路由定义 | `tests/contract/v2_baseline.json`（取自 v2.x `http_server.c`）中 91 条 `mg_str("/api/...")` | `crates/api/src/routes.rs` 84 条 `.route(...)` + `tests/contract/api_endpoints.json` 95 个端点 | **全覆盖** |
 | 通配子路径 | `/api/apn/templates/*`、`/api/sms/*`、`/api/plugins/storage/*` 等 8 类 | 等价改为 `:id` 参数化路由 + 参数化 SQL（`service_id`、模板 id 等） | 语义等价，且消除了拼接注入 |
 | 新增端点 | — | `/api/health`、`/api/events`（SSE 降级）、`/api/ws`（状态推送）、`/api/terminal/ws`（交互式 Shell）、`/api/audit/logs`、`/api/serial`、`/api/key` | 兼容增强，不改变旧客户端行为 |
 
