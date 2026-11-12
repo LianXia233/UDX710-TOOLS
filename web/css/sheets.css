@@ -1,0 +1,182 @@
+/**
+ * sheets.css —— 三种弹窗形态的定位、尺寸与动效。
+ * 加载顺序：components.css -> glass.css -> sheets.css -> responsive.css
+ * 依赖 dialog-variant.js 打上的 .dlg / .dlg--{center,bottom-sheet,side-sheet} 类。
+ * 严格 CSP：本文件为同源 stylesheet，不含内联样式；动画为纯 CSS keyframes。
+ */
+
+/* ---------- 公共骨架 ---------- */
+dialog.dlg {
+  padding: 0;
+  border: 1px solid var(--glass-border);
+  color: var(--text);
+  overflow: hidden;
+  box-shadow: var(--shadow-lg);
+}
+dialog.dlg .modal__panel,
+dialog.dlg .confirm__panel {
+  display: flex;
+  flex-direction: column;
+  max-height: inherit;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+dialog.dlg .modal__body,
+dialog.dlg .confirm__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+dialog.dlg .modal__head,
+dialog.dlg .confirm__head { flex: 0 0 auto; }
+dialog.dlg .modal__foot,
+dialog.dlg .confirm__foot { flex: 0 0 auto; }
+
+/* 关闭按钮 / 表单控件在触屏上的最小点击区 */
+dialog.dlg .modal__x { width: 40px; height: 40px; }
+dialog.dlg .btn { min-height: 42px; }
+
+/* ---------- ① Centered Modal Dialog（桌面默认） ---------- */
+dialog.dlg--center {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(var(--dlg-width, 560px), calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+  height: fit-content;
+  max-height: 86vh;
+  max-height: min(86dvh, 860px);
+  border-radius: var(--radius-lg);
+}
+dialog.dlg--center .modal__panel,
+dialog.dlg--center .confirm__panel { max-height: min(86dvh, 860px); }
+dialog.dlg--center[open] { animation: dlg-center-in 0.22s cubic-bezier(.2,.9,.3,1.05) both; }
+dialog.dlg--center[open].is-closing { animation: dlg-center-out 0.18s ease both; }
+
+/* ---------- ② Modal Bottom Sheet（手机默认） ---------- */
+dialog.dlg--bottom-sheet {
+  position: fixed;
+  inset: auto 0 0 0;
+  margin: 0;
+  width: 100%;
+  max-width: 100%;
+  height: fit-content;
+  max-height: 92vh;
+  max-height: calc(92dvh - env(safe-area-inset-bottom, 0px));
+  border-radius: 26px 26px 0 0;
+  border-bottom: 0;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+dialog.dlg--bottom-sheet .modal__panel,
+dialog.dlg--bottom-sheet .confirm__panel {
+  max-height: 92vh;
+  max-height: calc(92dvh - env(safe-area-inset-bottom, 0px));
+}
+dialog.dlg--bottom-sheet .modal__foot,
+dialog.dlg--bottom-sheet .confirm__foot {
+  padding-bottom: calc(var(--space-3) + env(safe-area-inset-bottom, 0px));
+}
+dialog.dlg--bottom-sheet[open] { animation: dlg-sheet-up 0.3s cubic-bezier(.2,.9,.3,1.02) both; }
+dialog.dlg--bottom-sheet[open].is-closing { animation: dlg-sheet-down 0.22s ease both; }
+
+/* 顶部拖拽把手：44px 触摸区，点击或下滑关闭 */
+.dlg__grabber { display: none; }
+dialog.dlg--bottom-sheet .dlg__grabber {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 30px;
+  min-height: 30px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  flex: 0 0 auto;
+  touch-action: none;
+}
+.dlg__grabber-bar {
+  display: block;
+  width: 42px;
+  height: 5px;
+  border-radius: 99px;
+  background: var(--text-muted);
+  opacity: 0.42;
+}
+dialog.dlg--bottom-sheet .dlg__grabber:hover .dlg__grabber-bar { opacity: 0.72; }
+
+/* 拖动中：暂停动画，位移由 --sheet-drag 驱动 */
+dialog.dlg.is-dragging {
+  animation: none !important;
+  transition: none !important;
+  transform: translateY(var(--sheet-drag, 0px));
+}
+
+/* ---------- ③ Right Side Sheet（右侧抽屉） ---------- */
+dialog.dlg--side-sheet {
+  position: fixed;
+  inset: 0 0 0 auto;
+  margin: 0;
+  width: min(var(--dlg-width, 520px), 100vw);
+  max-width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  max-height: 100vh;
+  max-height: 100dvh;
+  border-radius: 26px 0 0 26px;
+  border-right: 0;
+}
+dialog.dlg--side-sheet .modal__panel,
+dialog.dlg--side-sheet .confirm__panel {
+  height: 100%;
+  max-height: 100vh;
+  max-height: 100dvh;
+}
+dialog.dlg--side-sheet[open] { animation: dlg-sheet-right-in 0.3s cubic-bezier(.2,.9,.3,1.02) both; }
+dialog.dlg--side-sheet[open].is-closing { animation: dlg-sheet-right-out 0.22s ease both; }
+/* 长内容（日志 / JSON）在侧边抽屉里更易读 */
+dialog.dlg--side-sheet .modal__body { padding: var(--space-4) var(--space-5); }
+dialog.dlg--side-sheet pre.mono { word-break: break-word; }
+
+/* ---------- 遮罩 ---------- */
+dialog.dlg::backdrop {
+  background: rgba(15, 30, 56, 0.34);
+  -webkit-backdrop-filter: blur(7px);
+  backdrop-filter: blur(7px);
+}
+dialog.dlg--side-sheet::backdrop { background: rgba(15, 30, 56, 0.40); }
+
+/* ---------- 动效 ---------- */
+@keyframes dlg-center-in {
+  from { opacity: 0; transform: translateY(14px) scale(0.97); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes dlg-center-out {
+  from { opacity: 1; transform: none; }
+  to   { opacity: 0; transform: translateY(10px) scale(0.98); }
+}
+@keyframes dlg-sheet-up {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+@keyframes dlg-sheet-down {
+  from { transform: translateY(0); }
+  to   { transform: translateY(100%); }
+}
+@keyframes dlg-sheet-right-in {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+@keyframes dlg-sheet-right-out {
+  from { transform: translateX(0); }
+  to   { transform: translateX(100%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  dialog.dlg[open],
+  dialog.dlg[open].is-closing { animation: none; }
+}

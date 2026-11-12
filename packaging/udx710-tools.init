@@ -1,0 +1,43 @@
+#!/bin/sh /etc/rc.common
+# UDX710-TOOLS OpenWrt / procd 启动脚本。
+#
+# 安装：
+#   cp udx710-tools.init /etc/init.d/udx710-tools
+#   chmod 755 /etc/init.d/udx710-tools
+#   /etc/init.d/udx710-tools enable
+#   /etc/init.d/udx710-tools start
+#
+# 自愈闭环：config.toml 的 [watchdog] action="exit" 让进程在假死时以
+# 退出码 75 结束；procd 的 respawn 参数自动重新拉起服务。
+# 未使用 OpenWrt 时请改用 packaging/udx710-tools.service（systemd）。
+
+USE_PROCD=1
+START=95
+STOP=10
+
+DIR="/home/root/6677"
+CONFIG="$DIR/config.toml"
+
+start_service() {
+    procd_open_instance
+    procd_set_param command "$DIR/start.sh"
+    # respawn <threshold_secs> <restart_delay_secs> <max_retries>
+    # threshold=3600：连续运行超过 1 小时后重置重试计数；
+    # delay=3：每次重启间隔 3 秒；retries=0：不限制重启次数。
+    procd_set_param respawn 3600 3 0
+    procd_set_param env UDX_CONFIG="$CONFIG"
+    procd_set_param stdout 1
+    procd_set_param stderr 1
+    procd_set_param pidfile /var/run/udx710-tools.pid
+    procd_close_instance
+}
+
+stop_service() {
+    # start.sh 使用 exec，信号直达 server，procd 会等待进程退出。
+    :
+}
+
+reload_service() {
+    # 配置修改后重启实例；server 在启动时读取 config.toml。
+    restart
+}

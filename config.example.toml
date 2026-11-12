@@ -1,0 +1,71 @@
+# UDX710-TOOLS 配置样例
+# 复制为 config.toml 后按需修改；未提供的字段使用内置默认值。
+# 端口优先级：命令行参数 > UDX_PORT 环境变量 > config.toml > 6677
+
+port = 6677
+database = "6677.db"
+web_dir = "web"
+
+[auth]
+# 兼容旧版默认密码；首次登录后请立即通过 /api/auth/password 修改
+default_password = "admin"
+token_ttl_secs = 86400
+login_window_secs = 300
+login_max_failures = 5
+min_password_len = 6
+
+[shell]
+# 用户明确要求保留 Web 任意 Shell，因此默认启用。
+# 这是高风险管理员诊断功能：强制 Token + shell.execute 权限、
+# 登录限速、并发上限、超时与进程组清理、输出上限、全量审计。
+# 若部署环境不需要，请设为 false 彻底关闭。
+enabled = true
+max_command_len = 8192
+timeout_secs = 30
+max_output_bytes = 65536
+max_concurrent = 2
+session_timeout_secs = 900
+session_output_cap = 1048576
+audit_command = true
+
+[ota]
+# 恢复 TLS 证书验证，禁止 -k / --no-check-certificate
+verify_tls = true
+# 非空时仅允许这些主机提供更新包
+allowed_hosts = []
+max_package_bytes = 67108864
+require_signature = true
+download_timeout_secs = 120
+
+[limits]
+request_timeout_secs = 15
+max_body_bytes = 2097152
+rate_limit_per_minute = 120
+poll_interval_secs = 5
+at_queue_capacity = 32
+worker_threads = 2
+
+[dbus]
+call_timeout_secs = 3
+reconnect_backoff_secs = 5
+max_reconnect_attempts = 3
+
+[watchdog]
+# 后端看门狗：Tokio runtime 内周期喂狗，独立 OS 线程监测心跳。
+# runtime 卡死时 feeder 一并停摆，超时后以退出码 75 结束进程，
+# 由 systemd Restart=on-failure / OpenWrt procd respawn 自动拉起（自愈闭环）。
+enabled = true
+heartbeat_interval_secs = 2
+stall_after_secs = 30
+check_interval_secs = 1
+# "exit" = 交给 supervisor 重启（生产部署推荐，须配合 packaging 里的 service / init 脚本）
+# "log"  = 只告警 + /api/health 标记 stalled，不退出进程（无 supervisor 的开发环境用）
+action = "exit"
+# 状态可通过 GET /api/health 的 watchdog 字段查看；
+# 前端另有 web/js/core/watchdog.js 负责 UI 主线程假死与后端失联探测。
+
+# 安全提示：
+# 1. 生产部署优先启用 HTTPS 反向代理；隔离 LAN 也应有明确访问控制。
+# 2. 日志不记录密码、Token、短信正文或完整 AT 敏感参数。
+# 3. OTA 必须校验签名与 SHA-256 摘要，安装前自动备份 server.bak。
+# 4. 性能指标必须由目标设备实测，本配置不对内存占用做任何承诺。

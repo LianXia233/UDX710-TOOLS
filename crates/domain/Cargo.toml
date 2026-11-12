@@ -1,0 +1,14 @@
+[package]
+name = "udx-domain"
+description = "UDX710-TOOLS 领域模型、错误类型、状态与权限定义"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+chrono = { workspace = true }

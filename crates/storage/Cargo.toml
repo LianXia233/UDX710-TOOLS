@@ -1,0 +1,17 @@
+[package]
+name = "udx-storage"
+description = "SQLite 参数化访问、DB worker、配置与插件数据隔离持久化"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+udx-domain = { workspace = true }
+tokio = { workspace = true }
+rusqlite = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }

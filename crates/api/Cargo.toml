@@ -1,0 +1,30 @@
+[package]
+name = "udx-api"
+description = "Axum 路由、认证与授权中间件、限流/超时/CSP、静态资源内嵌、WebSocket"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+udx-domain = { workspace = true }
+udx-platform-linux = { workspace = true }
+udx-storage = { workspace = true }
+udx-services = { workspace = true }
+axum = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+rust-embed = { workspace = true }
+mime_guess = { workspace = true }
+futures-util = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }
+rand = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }

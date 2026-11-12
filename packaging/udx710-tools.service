@@ -1,0 +1,46 @@
+[Unit]
+Description=UDX710-TOOLS Rust service (Axum + embedded static web)
+Documentation=https://github.com/LianXia233/UDX710-TOOLS
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/root/6677
+ExecStart=/home/root/6677/start.sh
+# 自愈：内置看门狗（config.toml [watchdog] action="exit"）检测到 Tokio runtime
+# 假死后以退出码 75（EX_TEMPFAIL）结束进程，systemd 据此重新拉起。
+# 普通崩溃 / 非零退出同样触发重启；优雅关闭（SIGTERM -> exit 0）不会重启。
+Restart=on-failure
+RestartSec=3
+# 如需更激进的守护，可改为 Restart=always；但会掩盖主动停机的意图，默认不启用。
+
+# ---- 基础加固 ----
+NoNewPrivileges=true
+# /usr /boot /efi /etc 变为只读，/home 与部署目录仍可写。
+# 注意：若设备控制需要写 /etc（如 resolv.conf），需额外用 ReadWritePaths 放行该路径。
+ProtectSystem=full
+# 部署目录位于 /home/root/6677，启用 ProtectHome 会遮蔽或只读化该目录，故显式关闭。
+ProtectHome=false
+# 明确声明本服务唯一需要写入的目录。
+ReadWritePaths=/home/root/6677
+
+# ---- 刻意不启用的「强隔离」项（勿过度收紧）----
+# 本服务必须访问真实硬件与系统总线：
+#   oFono / 系统 D-Bus（/run/dbus/system_bus_socket）、Modem 串口与 USB 设备节点（/dev/*）、
+#   sysfs（/sys/class/net、/sys/bus/usb 等）以及 netlink（网络 / USB 模式切换）。
+# 以下任一项一旦启用都会导致上述功能失效，因此不启用：
+#   PrivateDevices=true        -> 隐藏 /dev，Modem / USB 节点不可见
+#   PrivateNetwork=true        -> 隔离网络命名空间，网络状态读取与控制失效
+#   ProtectSystem=strict       -> 整个文件系统只读，插件 / 数据 / 配置无法写入
+#   ProtectHome=read-only      -> /home/root/6677 变为只读，部署目录不可写
+#   RestrictAddressFamilies / IPAddressDeny
+#                              -> 阻断 AF_NETLINK / AF_INET，netlink 控制失效
+#   ProtectKernelTunables=true -> 可能限制写 sysfs，影响 USB 模式切换
+# 若未来要启用，需先把工作目录迁出 /home、显式放行 /dev 与 /sys，
+# 并在真机上逐项验证 Modem / SMS / USB / 网络功能后再收缩。
+# 另注：NoNewPrivileges 会阻止 setuid 提权；若设备控制依赖 setuid 辅助程序，
+# 应改用 CapabilityBoundingSet / AmbientCapabilities 精确授权，而不是关闭本项。
+
+[Install]
+WantedBy=multi-user.target

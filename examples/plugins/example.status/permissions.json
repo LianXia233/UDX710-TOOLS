@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "plugin_id": "example.status",
+  "permissions": [
+    {
+      "id": "device.status.read",
+      "kind": "data",
+      "risk": "low",
+      "reason": "读取设备名称、调制解调器连接状态、信号、运营商与网络接口概览"
+    },
+    {
+      "id": "device.status.refresh",
+      "kind": "action",
+      "risk": "low",
+      "reason": "点击「刷新」时请求宿主重新采集一次状态快照"
+    }
+  ]
+}

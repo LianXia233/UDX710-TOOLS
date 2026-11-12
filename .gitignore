@@ -37,3 +37,16 @@ temp/
 
 # Package lock (optional, uncomment if needed)
 # web/package-lock.json
+
+# ---- Rust ----
+# cargo 编译产物与旧版交叉编译工具链目录
+/target/
+/tools/
+# 覆盖率 / 插桩原始数据
+*.profraw
+
+# Cargo.lock 必须提交：本项目产出二进制，锁文件用于保证可复现构建，切勿忽略。
+!Cargo.lock
+
+# 本地运行 / 冒烟测试生成的 SQLite 数据库，不入库
+*.db

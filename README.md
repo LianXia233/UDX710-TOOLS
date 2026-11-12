@@ -1,300 +1,165 @@
-# 5G MiFi Dashboard(UDX710)
+# 5G MiFi Dashboard (UDX710-TOOLS)
 
-[🇨🇳 中文文档](README_CN.md)
+[中文文档](README_CN.md) | [Changelog](CHANGELOG.md) | [Feature parity report](docs/FEATURE_PARITY.md)
 
-A web-based management interface for 5G MiFi devices running on embedded Linux systems (aarch64).
+A web-based management interface for 5G MiFi devices running on embedded Linux (aarch64).
 
-> ⭐ **If you find this project useful, please give it a star!** It took a week of hard work to build this backend. Your support means a lot!
+**Current release: 3.1.0.** The `main` branch was fully rewritten following the *UDX710-TOOLS Rust / Native Frontend HTML5 Technical Report*: the backend moved from C + Mongoose + GLib/GIO to **Rust + Tokio + Axum**, and the frontend from Vue 3 + Vite + Tailwind to **plain HTML5 + CSS3 + JavaScript ES Modules**. No npm dependencies, no frontend build step, single binary with embedded static assets.
 
-## 📦 Versions
+## Branches and releases
 
-This project provides two versions for different devices:
+| Item | Detail |
+| --- | --- |
+| Maintained branch | `main` (the only remote branch today) |
+| History | The `SZ50` branch mentioned in older docs no longer exists on the remote and is out of scope |
+| CI | GitHub Actions cross-compiles `aarch64-unknown-linux-gnu`, artifact `udx710-tools-aarch64` |
+| Default port | `6677` (CLI arg > `UDX_PORT` > `config.toml` > default) |
 
-| Version | Target Device | Git Branch | Features | Description |
-|:---:|:---:|:---:|:---:|:---|
-| **UDX710 Generic** | UNISOC UDX710 Platform | `main` | ⭐ Basic Features | For most UDX710 devices |
-| **SZ50 Dedicated** | SZ50 MiFi Device | `SZ50` | 🌟 Full Features | Extra: LED Control, Key Listener, WiFi Control, Factory Reset, Client Management |
+## What changed
 
-> 💡 **Switch Version**: `git checkout SZ50` for SZ50 version, `git checkout main` for generic version
+| Version | Scope |
+| --- | --- |
+| **3.0.0** | Six-crate backend, native frontend, REST compatibility, security fixes, new plugin protocol, tests/CI/docs |
+| **3.1.0** | White glassmorphism theme, animated SVG, three dialog variants, full-range responsive layout, frontend/backend watchdogs, feature parity audit, documentation sync |
 
-### 📥 Download
-
-| Version | Download |
-|:---:|:---:|
-| **UDX710 Generic** | [📥 Download](https://github.com/LeoChen-CoreMind/UDX710-TOOLS/releases/latest) |
-| **SZ50 Dedicated** | [📥 Download](https://github.com/LeoChen-CoreMind/UDX710-TOOLS/releases/latest) |
-
-### SZ50 Dedicated Version Extra Features
-- 🔆 **LED Control** - Customize LED indicator status
-- 🔘 **Key Listener** - Physical button event response
-- 📶 **WiFi Control** - Full WiFi AP management
-- 🔄 **Factory Reset** - One-click restore to defaults
-- 👥 **Client Management** - Manage connected devices
-
-## ✨ Performance Highlights
-
-| Metric | This Project | Traditional (8080) |
-|--------|-------------|-------------------|
-| **Binary Size** | ~200 KB | ~6 MB |
-| **Memory Usage** (7h runtime) | ~1 MB | Much higher |
-
-Lightweight, efficient, and perfect for resource-constrained embedded devices!
-
-## 📸 Screenshots
-
-| System Monitor | Network Management | Advanced Network |
-|:---:|:---:|:---:|
-| <img src="docs/screenshot1.png" width="250" /> | <img src="docs/screenshot2.png" width="250" /> | <img src="docs/screenshot3.png" width="250" /> |
-
-| SMS Management | Traffic Statistics | Charge Control |
-|:---:|:---:|:---:|
-| <img src="docs/screenshot5.png" width="250" /> | <img src="docs/screenshot6.png" width="250" /> | <img src="docs/screenshot7.png" width="250" /> |
-
-| System Update | AT Debug | Web Terminal |
-|:---:|:---:|:---:|
-| <img src="docs/screenshot8.png" width="250" /> | <img src="docs/screenshot9.png" width="250" /> | <img src="docs/screenshot10.png" width="250" /> |
-
-| USB Mode | System Settings |
-|:---:|:---:|
-| <img src="docs/screenshot11.png" width="250" /> | <img src="docs/screenshot12.png" width="250" /> |
-
-| APN Settings | Plugin Store |
-|:---:|:---:|
-| <img src="docs/screenshot13.png" width="250" /> | <img src="docs/screenshot14.png" width="250" /> |
+Feature completeness was verified with repeatable scripts: **91 legacy C routes, 37 frontend endpoints, 27 component mappings, 16 menu items — zero uncovered**. See [docs/FEATURE_PARITY.md](docs/FEATURE_PARITY.md) and `tests/contract/parity.py`.
 
 ## Features
 
-### Network Management
-- **Modem Control**: View IMEI, ICCID, carrier info, signal strength
-- **Band Information**: Real-time display of network type, band, ARFCN, PCI, RSRP, RSRQ, SINR
-- **Cell Management**: View and manage cellular connections
-- **Traffic Statistics**: Monitor data usage with vnstat integration
-- **Traffic Control**: Set data limits and automatic network cutoff
+- **Modem & network**: IMEI/ICCID/operator, band & cell info, traffic stats and limits, interface monitoring, APN presets and custom profiles, airplane mode, charge control, scheduled reboot, system time.
+- **Device**: USB mode switching (ECM/NCM/RNDIS) with an exclusive lock and rollback state machine, SMS with SSRF-protected webhooks, IPv6 port forwarding, Rathole tunneling, OTA update with TLS/digest/signature/atomic rollback, factory reset, reboot, device control, AT debug.
+- **Extensions**: versioned JSON-UI plugin protocol with host rendering and permission checks, script management with non-executable storage, security questions, Token lifecycle and login rate limiting, audit log.
+- **Web Shell**: preserved by explicit user request as a separate high-risk administrator diagnostic channel (`shell.execute` / `terminal.session` permissions, concurrency cap, timeouts, output cap, process-group cleanup, full audit). Disable with `[shell] enabled=false`.
 
-### WiFi Management
-- **AP Mode**: Configure WiFi hotspot (SSID, password, channel)
-- **Client Management**: View connected devices, kick clients
-- **DHCP Settings**: Configure IP range and lease time
+## UI
 
-### System Features
-- **System Monitor**: CPU, memory, temperature monitoring (IMEI/ICCID privacy masking)
-- **SMS Management**: Send and receive SMS messages, Webhook forwarding support
-- **IPv6 Port Forwarding**: Full IPv6 port forwarding service
-  - Map local IPv4 ports to IPv6 addresses
-  - Automatic IPv6 address detection
-  - Webhook notification for IPv6 address changes
-  - Auto-start on boot support
-  - Send logs with response tracking
-- **Intranet Penetration (Rathole)**: Built-in Rathole client for NAT traversal
-  - Multi-service configuration
-  - Auto-generate server config
-  - Real-time connection status
-  - Auto-start on boot support
-- **LED Control**: Manage device LED indicators
-- **Airplane Mode**: Toggle airplane mode
-- **Power Management**: Battery status, charging control
-- **USB Mode Switch**: Switch between CDC-ECM, CDC-NCM, RNDIS USB network modes
-  - Temporary mode: Effective after reboot, reverts on next reboot
-  - Permanent mode: Persists across all reboots
-- **APN Settings**: Custom APN access point configuration
-  - Preset carrier configurations (China Mobile/Unicom/Telecom)
-  - Custom APN, username, password
-  - Multiple authentication protocols (PAP/CHAP)
-- **Plugin Store**: Extensible plugin system
-  - Support custom JS+HTML plugins
-  - Built-in Shell script execution API
-  - Script management (upload/edit/delete)
-  - Plugin import/export functionality
-- **OTA Update**: Over-the-air firmware updates
-- **Factory Reset**: Restore device to default settings
-- **Web Terminal**: Remote shell access
-- **AT Debug**: Direct AT command interface
+- White glassmorphism theme with light / dark / system color schemes.
+- Animated SVG aurora background, live brand mark and pulse wave (CSS + SMIL only, no JS animation loop).
+- Three dialog variants: **Centered Modal Dialog** (desktop default), **Modal Bottom Sheet** (mobile default, draggable grabber), **Right Side Sheet** (logs, JSON details, long forms). Switchable and previewable in Settings.
+- Responsive from 320px to 1920px, landscape phones, tablets and desktops; `100dvh`, `env(safe-area-inset-*)`, 44px touch targets, horizontally scrollable tables.
+- Strict CSP retained: `script-src 'self'`, `style-src 'self'`, no `unsafe-eval` / `unsafe-inline`.
 
-### UI Features
-- **Dark Mode**: Full dark/light theme support
-- **Responsive Design**: Mobile and desktop optimized
-- **Real-time Updates**: Live data refresh
-- **Chinese Interface**: Native Chinese language support
+Full details in [docs/UI.md](docs/UI.md).
 
-### Security Features
-- **Backend Authentication**: Password-protected admin interface
-  - Default password: `admin` (recommended to change after first login)
-  - Token-based authentication with auto-expiration
-  - Remember password option
-  - Password change support
+## Watchdog
+
+| Layer | Detects | Recovery |
+| --- | --- | --- |
+| Backend OS thread | Tokio runtime freeze | Exit code 75, restarted by systemd / procd |
+| Frontend heartbeat drift | Blocked UI main thread | Banner + auto reload (cancellable) |
+| Frontend health probe | Backend unreachable / stalled | Retry loop + rebuild WS/SSE on recovery |
+
+Config: `config.example.toml` `[watchdog]`. Status: `GET /api/health` → `watchdog`. Deployment: [docs/WATCHDOG.md](docs/WATCHDOG.md).
 
 ## Architecture
 
 ```
-├── src/                    # Backend (C)
-│   ├── main.c              # Entry point
-│   ├── mongoose.c/h        # HTTP server (Mongoose)
-│   ├── packed_fs.c         # Embedded static files
-│   ├── handlers/           # HTTP API handlers
-│   │   ├── http_server.c   # Route definitions
-│   │   └── handlers.c      # API implementations
-│   └── system/             # System modules
-│       ├── sysinfo.c       # System information
-│       ├── wifi.c          # WiFi control
-│       ├── sms.c           # SMS management
-│       ├── traffic.c       # Traffic statistics
-│       ├── modem.c         # Modem control
-│       ├── ofono.c         # oFono D-Bus integration
-│       ├── led.c           # LED control
-│       ├── charge.c        # Battery management
-│       ├── airplane.c      # Airplane mode
-│       ├── usb_mode.c      # USB mode switch
-│       ├── plugin.c        # Plugin system
-│       ├── update.c        # OTA updates
-│       ├── factory_reset.c # Factory reset
-│       └── ...
-└── web/                    # Frontend (Vue 3)
-    ├── src/
-    │   ├── App.vue         # Main application
-    │   ├── components/     # Vue components
-    │   ├── composables/    # Vue composables
-    │   └── plugins/        # Plugins (FontAwesome)
-    ├── index.html
-    ├── package.json
-    ├── vite.config.js
-    └── tailwind.config.js
+Cargo.toml                  Rust workspace (6 crates) + release profile
+config.example.toml
+crates/
+  domain/                   Models, permissions, error semantics, state machines
+  platform-linux/           Fixed-argv commands, Web Shell, sysfs/procfs, oFono D-Bus
+  storage/                  SQLite (rusqlite bundled), DB worker, static parameterized SQL
+  services/                 Business services, AT queue, USB state machine, OTA, plugins, watchdog
+  api/                      Axum routes, middleware, handlers, WS/SSE, embedded static assets
+  app/                      Entry point, Tokio runtime, graceful shutdown
+web/                        Static frontend embedded by rust-embed
+  index.html                SPA shell + strict CSP
+  css/                      tokens / layout / components / glass / sheets / responsive
+  js/                       core / components / pages / utils / i18n (ES Modules)
+  icons/                    sprite.svg + animated SVGs
+migrations/001_init.sql     Idempotent schema migration
+tests/contract/             95-endpoint API contract + verify.py + parity.py
+crates/api/tests/           Security integration tests
+docs/                       Architecture, contract, migration, plugin protocol, security, UI, watchdog
+examples/plugins/           Sample plugin using the new protocol
+packaging/                  start.sh, systemd unit, procd init, deployment notes
 ```
 
-## Requirements
+Legacy `src/` (C) and `web/src/` (Vue), `web/package.json`, `vite.config.js` are historical and unused by 3.x builds.
 
-### Backend
-- GCC cross-compiler (aarch64-linux-gnu)
-- GLib 2.0 (D-Bus support)
-- Target: Linux aarch64 (embedded device)
+## Deploy
 
-### Frontend
-- Node.js 18+
-- npm or yarn
-
-## Build Instructions
-
-### Frontend
-```bash
-cd web
-npm install
-npm run build
+```sh
+cp config.example.toml config.toml
+./start.sh            # default port 6677
+./start.sh 8080       # custom port
+# open http://<device-ip>:6677
 ```
 
-### Backend
-```bash
-# Pack frontend into C source
-cd src
-# Generate packed_fs.c from web/dist
+```sh
+# systemd
+cp packaging/udx710-tools.service /etc/systemd/system/
+systemctl daemon-reload && systemctl enable --now udx710-tools
 
-# Cross-compile for aarch64
-make
+# OpenWrt procd
+cp packaging/udx710-tools.init /etc/init.d/udx710-tools
+chmod 755 /etc/init.d/udx710-tools
+/etc/init.d/udx710-tools enable && /etc/init.d/udx710-tools start
 ```
 
-### Makefile Configuration
-The backend uses cross-compilation targeting aarch64-linux-gnu. Ensure your toolchain is properly configured.
+Default password is `admin` — **change it immediately** via `/api/auth/password`. See [packaging/README.md](packaging/README.md) for rollback instructions.
 
-## API Endpoints
+## Build from source
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/sysinfo` | GET | System information |
-| `/api/wifi/config` | GET/POST | WiFi configuration |
-| `/api/wifi/clients` | GET | Connected clients |
-| `/api/sms/list` | GET | SMS messages |
-| `/api/sms/send` | POST | Send SMS |
-| `/api/traffic/stats` | GET | Traffic statistics |
-| `/api/traffic/limit` | POST | Set traffic limit |
-| `/api/modem/info` | GET | Modem information |
-| `/api/band/current` | GET | Current band info |
-| `/api/led/status` | GET/POST | LED control |
-| `/api/airplane` | GET/POST | Airplane mode |
-| `/api/usb/mode` | GET/POST | USB mode switch (CDC-ECM/CDC-NCM/RNDIS) |
-| `/api/apn` | GET/POST | APN configuration management |
-| `/api/plugins` | GET/POST/DELETE | Plugin management |
-| `/api/scripts` | GET/POST/PUT/DELETE | Script management |
-| `/api/shell` | POST | Execute Shell commands |
-| `/api/ipv6-proxy/config` | GET/POST | IPv6 proxy configuration |
-| `/api/ipv6-proxy/rules` | GET/POST/DELETE | IPv6 forwarding rules |
-| `/api/ipv6-proxy/status` | GET | IPv6 proxy status |
-| `/api/ipv6-proxy/send-logs` | GET | IPv6 send logs |
-| `/api/rathole/config` | GET/POST | Rathole configuration |
-| `/api/rathole/services` | GET/POST/DELETE | Rathole service management |
-| `/api/rathole/status` | GET | Rathole connection status |
-| `/api/rathole/logs` | GET | Rathole logs |
-| `/api/update/check` | GET | Check for updates |
-| `/api/update/install` | POST | Install update |
-| `/api/factory-reset` | POST | Factory reset |
-| `/api/reboot` | POST | Reboot device |
+```sh
+cargo test --workspace
+python3 tests/contract/verify.py
+python3 tests/contract/parity.py
+cargo run -p udx-app -- 6677
 
-## Dependencies
-
-### Backend Libraries
-- [Mongoose](https://github.com/cesanta/mongoose) - Embedded HTTP server
-- GLib/GIO - D-Bus communication with oFono
-
-### Frontend Libraries
-- Vue 3 - UI framework
-- Vite - Build tool
-- TailwindCSS - Styling
-- FontAwesome - Icons
-
-## 🌐 Remote Management
-
-Built-in lightweight Web Server for browser-based control interface.
-
-**Features**: Device status cards, real-time monitoring, network control & debugging
-
-| Version | Default Access |
-|:---:|:---|
-| UDX710 Generic | `http://DEVICE_IP:6677` |
-| SZ50 Dedicated | `http://DEVICE_IP:80` |
-
-```bash
-# Start server (default port)
-./server
-
-# Start with custom port
-./server 80
+rustup target add aarch64-unknown-linux-gnu
+CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc \
+CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc \
+cargo build --release --target aarch64-unknown-linux-gnu -p udx-app
 ```
 
-## 📜 License
+Requires Rust stable and `gcc-aarch64-linux-gnu` for cross builds. Node.js is not required. Release profile: `opt-level="s"`, LTO, `codegen-units=1`, `panic="abort"`, `strip=true`. **No fixed memory-saving ratio is promised** — performance must be measured on real hardware.
 
-This project is licensed under **GPLv3** (strong Copyleft):
+## Verification
 
-| ✅ Allowed | ⚠️ Required | ❌ Prohibited |
-|:---|:---|:---|
-| Use, modify, distribute | Keep copyright notices | Closed-source commercialization |
-| Distribute modified versions | Open source (when distributing) | Remove copyright info |
-| | Use same license | Change to other licenses |
+| Check | Result |
+| --- | --- |
+| `cargo test --workspace` | 53 passed / 0 failed (5 watchdog unit tests, 11 API integration tests) |
+| `tests/contract/verify.py` | PASS: 95 endpoints, all 90 legacy C routes matched, 0 unmatched, 69 write endpoints require auth |
+| `tests/contract/parity.py` | PASS: 91 routes / 37 endpoints / 27 components / 16 menus, 0 uncovered |
+| Frontend JS | all files pass `node --check` |
+| Live process smoke test | health, login, unauthorized blocking, Web Shell, WS handshake + Token revocation, audit, CSP |
 
-See [LICENSE](LICENSE)
+**Needs real hardware** (no oFono D-Bus in the sandbox; device actions return `device_verified: false` rather than faking success): Modem/SMS/USB/Rathole/IPv6 behavior, D-Bus reconnect, OTA power-loss rollback, watchdog respawn latency, RSS/PSS, 72-hour stability, memory pressure.
 
-## 🙏 Acknowledgments
+## API and security
 
-Special thanks to the following contributors:
+- Legacy path spellings retained (`/api/claen/cron`, `/api/get/Total`); new fields do not change old semantics.
+- All write endpoints require authentication; the old `/api/device_control` POST/OPTIONS auth bypass is fixed and CORS preflight returns 204 without executing any action.
+- Error body stays compatible: `{ "status": "error", "message": "..." }`; internal details are never echoed.
+- Static parameterized SQL, fixed-argv internal commands, OTA TLS/digest/signature, webhook SSRF protection, no arbitrary plugin JS/HTML, access logs contain only `method/path/status/latency_ms` (no query tokens, headers or bodies).
 
-| Contributor | Contribution |
-|:---:|:---|
-| **等不住** | AT Commands |
-| **黑衣剑士** | USB Mode Switch |
-| **Voodoo** | Glib Build Environment |
-| **1orz** | [project-cpe](https://github.com/1orz/project-cpe) Open Source Project |
-| **LeoChen** | Project Author |
+See [docs/API_CONTRACT.md](docs/API_CONTRACT.md) and [docs/SECURITY.md](docs/SECURITY.md).
 
-Thanks to all community members for your support and feedback!
+## Documentation
 
-## ☕ Support the Project
+| Doc | Content |
+| --- | --- |
+| [CHANGELOG.md](CHANGELOG.md) | Release notes |
+| [docs/UI.md](docs/UI.md) | Glass theme, animated SVG, dialog variants, responsive breakpoints |
+| [docs/WATCHDOG.md](docs/WATCHDOG.md) | Watchdogs and supervisor self-healing |
+| [docs/FEATURE_PARITY.md](docs/FEATURE_PARITY.md) | Legacy feature parity evidence |
+| [docs/API_CONTRACT.md](docs/API_CONTRACT.md) | Endpoint table and compatibility policy |
+| [docs/SECURITY.md](docs/SECURITY.md) | Security audit mapping and threat model |
+| [docs/PLUGIN_PROTOCOL.md](docs/PLUGIN_PROTOCOL.md) | JSON UI plugin protocol and migration |
+| [docs/MIGRATION.md](docs/MIGRATION.md) | Migration phases and hardware acceptance |
+| [packaging/README.md](packaging/README.md) | Deployment and rollback |
+| [tests/README.md](tests/README.md) | Tests and contract scripts |
 
-This project is completely open source and free. If you like this project, you can buy me a coffee~
+`docs/screenshot*.png` are 2.x (Vue 3) archives; 3.x uses the white glass theme.
 
-| Alipay | WeChat | QQ Group |
-|:---:|:---:|:---:|
-| <img src="docs/alipay.png" width="200" /> | <img src="docs/wechat.png" width="200" /> | <img src="docs/qq_group.png" width="200" /> |
+## License
 
-## 💬 Community
+**GPLv3** — see [LICENSE](LICENSE). You may use, modify and distribute; you must keep copyright notices, publish source when distributing, and use the same license. Closed-source commercial use and relicensing are not permitted.
 
-Welcome to join the discussion!
+## Credits
 
-- **QQ Group**: 1029148488
+Thanks to 等不住 (AT commands), 黑衣剑士 (USB mode switching), Voodoo (GLib build environment), 1orz ([project-cpe](https://github.com/1orz/project-cpe)), and LeoChen (original author).
 
-Welcome to submit Issues / Pull Requests to improve the project 💡
+QQ group: 1029148488. Issues and pull requests are welcome.

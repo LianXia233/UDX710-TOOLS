@@ -1,0 +1,7 @@
+{
+  "id": "example.status",
+  "name": "设备状态",
+  "version": "1.0.0",
+  "min_api_version": 1,
+  "description": "展示设备与调制解调器状态，并提供刷新按钮（受限 JSON UI 协议示例）"
+}

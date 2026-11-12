@@ -1,3 +1,17 @@
+# UDX710-TOOLS — Rust workspace CI
+#
+# 与旧版（Node + Vite + make 交叉编译）的区别：
+#   * 前端已改为纯静态 HTML5 / ES Modules，并在编译期由 rust-embed 内嵌进 server 二进制，
+#     因此前端与旧 C 后端都不再参与构建：无需 Node 工具链、无需前端打包、无需旧的 C 构建入口，
+#     交付物里没有 web/dist，整条构建链路只剩 cargo。
+#   * 体积优先的 release profile 已在仓库根 Cargo.toml 配置（技术报告第 09 章 9.5）：
+#       [profile.release]
+#       opt-level = "s"      # 以体积为优先起点，再对比 "z" / "3"
+#       lto = true
+#       codegen-units = 1
+#       panic = "abort"
+#       strip = true
+#     交叉编译同样继承该 profile，命令行无需重复指定。
 name: Build UDX710 Tools
 
 on:
@@ -8,55 +22,75 @@ jobs:
   build-arm:
     runs-on: ubuntu-latest
 
+    env:
+      CARGO_TERM_COLOR: always
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install dependencies
-        run: |
-          curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
-          sudo apt-get update
-          sudo apt-get install -y nodejs
+      - name: Install Rust stable toolchain
+        uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache cross compiler (aarch64)
+      # 缓存 cargo 注册表 / git 依赖 / 编译产物。
+      # 宿主 cargo test 与 aarch64 交叉 build 都落在 target/ 下，一份缓存即可覆盖。
+      - name: Cache cargo registry and target
         uses: actions/cache@v4
         with:
-          path: ${{ github.workspace }}/tools/gcc-linaro-7.5.0-2019.12-x86_64_aarch64-linux-gnu
-          key: gcc-linaro-7.5.0-2019.12-x86_64_aarch64-linux-gnu
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
 
-      - name: Configure cross compiler (aarch64)
-        run: |
-          mkdir -p $GITHUB_WORKSPACE/tools
-          if [ ! -d "$GITHUB_WORKSPACE/tools/gcc-linaro-7.5.0-2019.12-x86_64_aarch64-linux-gnu" ]; then
-            wget https://releases.linaro.org/components/toolchain/binaries/7.5-2019.12/aarch64-linux-gnu/gcc-linaro-7.5.0-2019.12-x86_64_aarch64-linux-gnu.tar.xz
-            tar xf gcc-linaro-7.5.0-2019.12-x86_64_aarch64-linux-gnu.tar.xz -C $GITHUB_WORKSPACE/tools
-          fi
-          echo "PATH=$PATH:$GITHUB_WORKSPACE/tools/gcc-linaro-7.5.0-2019.12-x86_64_aarch64-linux-gnu/bin" >> $GITHUB_ENV
+      # 宿主（x86_64）运行全 workspace 测试，先于交叉编译暴露编译/单元测试问题。
+      - name: Run workspace tests (host)
+        run: cargo test --workspace
 
-      - name: build web
+      # 契约 + 功能移植对照 + 前端语法，作为发布前的可复跑门禁。
+      # parity.py 读取仓库中保留的 v2.x 旧源码（src/、web/src/）逐项比对，
+      # 任何旧路由 / 组件 / 菜单未被新实现覆盖即 FAIL。
+      - name: Verify contract, feature parity and frontend syntax
         run: |
-          cd web
-          npm install && npm run build
+          python3 tests/contract/verify.py
+          python3 tests/contract/parity.py
+          find web -name '*.js' -print0 | xargs -0 -n1 node --check
 
-      - name: build server
+      - name: Install aarch64 cross toolchain
         run: |
-          cd src
-          make
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+          rustup target add aarch64-unknown-linux-gnu
 
-      - name: dopack
+      - name: Cross build release binary (aarch64)
+        env:
+          # 交叉链接器：让 rustc 调用 aarch64 版 gcc 完成最终链接。
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+          # rusqlite(bundled) 会编译 SQLite 的 C 源码，需要对应的交叉 C 编译器。
+          CC_aarch64_unknown_linux_gnu: aarch64-linux-gnu-gcc
+        run: cargo build --release --target aarch64-unknown-linux-gnu -p udx-app
+
+      # 把 udx-app 重命名为 server，连同启动脚本、systemd unit、部署说明一起打包。
+      # 前端静态资源已内嵌进二进制，artifact 无需任何 web/ 文件。
+      - name: Package artifact
         run: |
-          mkdir -p output/6677
-          echo "#!/bin/sh" > start.sh
-          echo "cd /home/root/6677" >> start.sh
-          echo "chmod 755 *" >> start.sh
-          echo "./server &" >> start.sh
-          mv start.sh output/6677/
-          cp -r web/dist output/6677/
-          cp src/build/ofono-server output/6677/server
+          mkdir -p dist/6677
+          cp target/aarch64-unknown-linux-gnu/release/udx-app dist/6677/server
+          chmod 755 dist/6677/server
+          cp packaging/start.sh dist/6677/start.sh
+          chmod 755 dist/6677/start.sh
+          cp packaging/udx710-tools.service dist/6677/udx710-tools.service
+          cp packaging/udx710-tools.init dist/6677/udx710-tools.init
+          chmod 755 dist/6677/udx710-tools.init
+          cp packaging/README.md dist/6677/README.md
+          cp config.example.toml dist/6677/config.example.toml
+          cp CHANGELOG.md dist/6677/CHANGELOG.md
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: udx710-tools
-          path: output
-
+          name: udx710-tools-aarch64
+          path: dist/6677/
+          if-no-files-found: error
