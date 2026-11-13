@@ -518,7 +518,11 @@ impl ModemService {
             }));
         }
 
-        // 获取并追加真实基站测量邻区
+        // 获取并追加真实基站测量邻区。
+        // 注意：oFono NetworkMonitor.GetNeighborCellInformation 返回的 `CellId`
+        // 是小区标识（NR 下可达 26 位 NCI 范围），并非 PCI（0-1007）；
+        // 早期实现把它直接塞进 pci 字段，导致矩阵显示 "PCI 1603" 这类
+        // 超范围假值。此处改用独立 cell_id 字段，且不再伪造 rsrp/rsrq。
         let neighbors = self.neighbor_cells().await;
         for n in neighbors {
             let cid = n.get("CellId").and_then(|v| v.as_u64())
@@ -537,20 +541,19 @@ impl ModemService {
                         None
                     }
                 });
-            if let Some(pci) = cid {
-                let rsrp_val = match strg {
-                    Some(s) if s <= 140 => (s as i64) - 140,
-                    Some(s) => -140 + (s.min(100) as i64),
-                    None => -95,
-                };
+            if let Some(cell_id) = cid {
                 rows.push(json!({
                     "type": cur_tech,
                     "technology": cur_tech,
                     "band": cur_band,
                     "arfcn": cur_arfcn,
-                    "pci": pci,
-                    "rsrp": rsrp_val,
-                    "rsrq": -12,
+                    "cell_id": cell_id,
+                    // oFono 只上报 0-100 的 Strength，没有邻区 RSRP/RSRQ；
+                    // 不伪造测量值，留给前端按「信号强度」展示。
+                    "strength": strg,
+                    "pci": null,
+                    "rsrp": null,
+                    "rsrq": null,
                     "status": "相邻基站小区 (测量中)",
                     "serving": false,
                     "locked": false,

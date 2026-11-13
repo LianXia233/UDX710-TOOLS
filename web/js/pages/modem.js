@@ -320,9 +320,29 @@ export function render(container, context) {
       { label: '无线技术', render: (r) => safeText(r.type || r.technology) },
       { label: '频段 (Band)', render: (r) => safeText(r.band) },
       { label: '频点 (ARFCN)', render: (r) => safeText(r.arfcn) },
-      { label: '物理小区 (PCI)', render: (r) => safeText(r.pci) },
-      { label: 'RSRP (dBm)', render: (r) => safeText(r.rsrp) },
-      { label: 'RSRQ (dB)', render: (r) => safeText(r.rsrq) },
+      {
+        // PCI 仅主服小区由 oFono PhysicalCellId 提供（0-1007）；
+        // 邻区上报的是 CellId（小区标识，NR 可达 26 位），不是 PCI。
+        label: '物理小区 (PCI)',
+        render: (r) => (r.pci != null && r.pci !== '' ? safeText(r.pci) : '—')
+      },
+      {
+        label: '小区标识 (Cell ID)',
+        render: (r) => {
+          if (r.cell_id != null) return safeText(r.cell_id);
+          if (r.serving) {
+            // 主服小区用 NRCellID / CellId 补充展示（若有）
+            return safeText(r.nr_cell_id || r.cell_id || '—');
+          }
+          return '—';
+        }
+      },
+      { label: 'RSRP (dBm)', render: (r) => (r.rsrp != null && r.rsrp !== '' ? safeText(r.rsrp) : '未测量') },
+      { label: 'RSRQ (dB)', render: (r) => (r.rsrq != null && r.rsrq !== '' ? safeText(r.rsrq) : '未测量') },
+      {
+        label: '信号强度',
+        render: (r) => (r.strength != null && r.strength !== '' ? `${safeText(r.strength)} / 100` : '—')
+      },
       {
         label: '小区状态',
         render: (r) => ctx.statusBadge(
@@ -332,11 +352,18 @@ export function render(container, context) {
       },
       {
         label: '快捷操作',
-        render: (r) => button(r.locked ? '已锁定' : '锁此小区', {
-          variant: r.locked ? 'ghost sm' : 'primary sm',
-          disabled: !!r.locked,
-          onClick: () => showLockCellModal(r.arfcn, r.pci, (r.technology || r.type || 'nr').toLowerCase())
-        })
+        // 邻区没有 PCI，无法下发锁定；仅主服小区或带 PCI 的行提供锁定入口。
+        render: (r) => {
+          const canLock = r.pci != null && r.pci !== '';
+          if (!canLock) {
+            return button('无 PCI 不可锁', { variant: 'ghost sm', disabled: true });
+          }
+          return button(r.locked ? '已锁定' : '锁此小区', {
+            variant: r.locked ? 'ghost sm' : 'primary sm',
+            disabled: !!r.locked,
+            onClick: () => showLockCellModal(r.arfcn, r.pci, (r.technology || r.type || 'nr').toLowerCase())
+          });
+        }
       }
     ],
     rows: [],
@@ -456,9 +483,9 @@ export function render(container, context) {
           technology: netType || '5G NR',
           band: bandName || 'NR n41',
           arfcn: arfcn != null ? arfcn : 504990,
-          pci: pci != null ? pci : 128,
-          rsrp: rsrp != null ? rsrp : -78,
-          rsrq: rsrq != null ? rsrq : -10,
+          pci: pci != null ? pci : null,
+          rsrp: rsrp != null ? rsrp : null,
+          rsrq: rsrq != null ? rsrq : null,
           status: isCellLocked ? '主服务小区 (已锁定)' : '主服务小区',
           serving: true,
           locked: isCellLocked

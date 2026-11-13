@@ -95,11 +95,13 @@ jobs:
 
       # 静态 musl 交叉构建：镜像自带 aarch64-linux-musl-gcc，
       # 可同时编译 rusqlite(bundled) 的 SQLite C 源码，产物无 glibc 依赖。
+      # 注意：该镜像 entrypoint 不是 cargo，必须显式 `cargo build`；
+      # 直接写 `build ...` 会报 "exec: build: executable file not found"（历史踩坑）。
       - name: Cross build static release binary (aarch64 musl)
         run: |
           docker run --rm -v "$PWD":/home/rust/src \
             messense/rust-musl-cross:aarch64-musl \
-            build --release -p udx-app
+            cargo build --release -p udx-app
 
       # 把 udx-app 重命名为 server，连同启动脚本、supervisor 配置、部署说明一起打包。
       # 前端静态资源已内嵌进二进制，artifact 无需任何 web/ 文件。

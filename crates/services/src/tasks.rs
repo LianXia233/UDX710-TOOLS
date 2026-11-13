@@ -166,12 +166,21 @@ impl AtBackend {
                     }
                     "AT^MONSC" | "AT+QENG=\"SERVINGCELL\"" => {
                         if let Ok(serving) = dbus.ofono_call(&path, "org.ofono.NetworkMonitor", "GetServingCellInformation").await {
-                            let pci = serving.get("PhysicalCellId").and_then(|v| v.as_u64()).unwrap_or(643);
-                            let arfcn = serving.get("NRARFCN").and_then(|v| v.as_u64()).unwrap_or(504990);
-                            let rsrp = serving.get("ssRsrp").and_then(|v| v.as_i64()).unwrap_or(-65);
-                            let rsrq = serving.get("ssRsrq").and_then(|v| v.as_i64()).unwrap_or(-11);
-                            let sinr = serving.get("ssSinr").and_then(|v| v.as_i64()).unwrap_or(17);
-                            format!("^MONSC: \"NR\", {pci}, {arfcn}, {rsrp}, {rsrq}, {sinr}\r\n\r\nOK\r\n")
+                            // 无数据时输出空应答而不是编造默认值（假 PCI 会误导排障）。
+                            let pci = serving.get("PhysicalCellId").and_then(|v| v.as_u64());
+                            let arfcn = serving.get("NRARFCN").and_then(|v| v.as_u64());
+                            let rsrp = serving.get("ssRsrp").and_then(|v| v.as_i64());
+                            let rsrq = serving.get("ssRsrq").and_then(|v| v.as_i64());
+                            let sinr = serving.get("ssSinr").and_then(|v| v.as_i64());
+                            match (pci, arfcn) {
+                                (Some(p), Some(a)) => {
+                                    let r = rsrp.map(|v| v.to_string()).unwrap_or_else(|| "-".into());
+                                    let q = rsrq.map(|v| v.to_string()).unwrap_or_else(|| "-".into());
+                                    let s = sinr.map(|v| v.to_string()).unwrap_or_else(|| "-".into());
+                                    format!("^MONSC: \"NR\", {p}, {a}, {r}, {q}, {s}\r\n\r\nOK\r\n")
+                                }
+                                _ => "\r\nOK\r\n".to_string(),
+                            }
                         } else {
                             "OK\r\n".to_string()
                         }

@@ -7,6 +7,8 @@ import { fieldOf, safeText } from '../utils/format.js';
 
 let ctx = null;
 let logEl = null;
+// check 阶段记录的 SHA256SUMS 地址，download 时透传给后端自动发现摘要。
+let lastSha256Url = '';
 
 function log(text) {
   if (!logEl) return;
@@ -41,6 +43,8 @@ export function render(container, context) {
         const hasUpdate = Boolean(o.update_available);
         const notes = fieldOf(o, 'release_notes', '');
         const dlUrl = fieldOf(o, 'download_url', '');
+        const shaUrl = fieldOf(o, 'sha256_url', '');
+        lastSha256Url = typeof shaUrl === 'string' ? shaUrl : '';
 
         versionLabel.textContent = `v${cur}`;
         if (hasUpdate) {
@@ -62,16 +66,18 @@ export function render(container, context) {
   grid.appendChild(versionCard.el);
 
   const pkgCard = ctx.card({ title: '更新包', span: 7, icon: 'cloud-upload' });
-  const urlInput = field({ label: '远程更新包 URL', name: 'url', placeholder: 'https://...' });
-  const fileInput = el('input', { type: 'file', accept: '.zip', class: 'input' });
+  const urlInput = field({ label: '远程更新包 URL', name: 'url', placeholder: 'https://... (CI Release 的 .tar.gz 或纯二进制)' });
+  const fileInput = el('input', { type: 'file', accept: '.zip,.tar.gz,.bin', class: 'input' });
   const urlBtn = button('下载并安装', {
     variant: 'primary', icon: 'cloud-download',
     onClick: async () => {
       const url = urlInput.input.value.trim();
       if (!url) { ctx.toast.error('请输入更新包 URL'); return; }
       try {
-        log('下载更新包…');
-        await ctx.api('/api/update/download', { method: 'POST', body: { url }, signal: ctx.signal });
+        log('下载更新包…（摘要将自动从 Release 的 SHA256SUMS 获取）');
+        const body = { url };
+        if (lastSha256Url) body.sha256_url = lastSha256Url;
+        await ctx.api('/api/update/download', { method: 'POST', body, signal: ctx.signal });
         await extractAndInstall();
       } catch (e) { log(`下载失败：${(e && e.message) || e}`); }
     }
@@ -80,7 +86,7 @@ export function render(container, context) {
     variant: 'outline', icon: 'upload',
     onClick: async () => {
       const file = fileInput.files && fileInput.files[0];
-      if (!file) { ctx.toast.error('请选择 .zip 更新包'); return; }
+      if (!file) { ctx.toast.error('请选择 .tar.gz / .zip / .bin 更新包'); return; }
       const form = new FormData();
       form.append('file', file);
       try {
@@ -118,18 +124,51 @@ export function render(container, context) {
   async function extractAndInstall() {
     try {
       log('解压更新包…');
-      await ctx.api('/api/update/extract', { method: 'POST', signal: ctx.signal });
+      const exRes = await ctx.api('/api/update/extract', { method: 'POST', signal: ctx.signal });
+      const ex = fieldOf(exRes, 'data', exRes) || {};
+      if (ex.extracted) {
+        log(`已从归档解出 ${safeText(ex.extracted)}（${(ex.binary_size || 0)} 字节），未执行包内脚本。`);
+      }
       const ok = await ctx.confirm({
-        title: '安装更新', message: '解压完成，确定开始安装吗？更新过程中设备可能重启。', danger: true
+        title: '安装更新', message: '解压完成，确定开始安装吗？安装后服务将自动重启，期间面板短暂不可用。', danger: true
       });
       if (!ok) { log('已取消安装'); return; }
-      log('执行安装脚本…');
+      log('执行安装（原子替换 server，失败自动回滚）…');
       const res = await ctx.api('/api/update/install', { method: 'POST', signal: ctx.signal, timeout: 60000 });
       log(`安装完成：${safeText(fieldOf(res, 'message', '成功'), '')}`);
-      ctx.toast.success('系统更新成功');
+      log('服务即将自动重启，等待恢复…');
+      ctx.toast.success('安装完成，等待服务重启');
+      await waitServiceRecovery();
     } catch (e) {
       log(`更新失败：${(e && e.message) || e}`);
       ctx.toast.error(ctx.t('common.requestFailed'));
+    }
+  }
+
+  // 安装后服务会退出并由看门狗拉起（约 15-40s）；轮询免认证的
+  // /api/health 直到恢复，恢复后刷新版本徽标。超时 120s 则提示手动刷新。
+  async function waitServiceRecovery() {
+    const deadline = Date.now() + 120000;
+    let up = false;
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 5000));
+      try {
+        await fetch('/api/health', { cache: 'no-store' });
+        up = true;
+        break;
+      } catch (e) { /* 未恢复，继续等待 */ }
+    }
+    if (up) {
+      log('服务已恢复。');
+      try {
+        const res = await ctx.api('/api/update/version', { signal: ctx.signal });
+        const v = safeText(fieldOf(res, 'version', fieldOf(res, 'data', res)), '');
+        if (v) versionLabel.textContent = v.startsWith('v') ? v : `v${v}`;
+      } catch (e) { /* 版本读取失败不影响结论 */ }
+      ctx.toast.success('服务已恢复，更新生效');
+    } else {
+      log('等待超时：服务未在 120s 内恢复，请检查设备侧 panel_watchdog 日志（/tmp/panel_watchdog.log）后手动刷新。');
+      ctx.toast.error('服务恢复超时，请手动刷新页面确认');
     }
   }
 

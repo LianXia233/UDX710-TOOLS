@@ -8,6 +8,24 @@
 
 ## [Unreleased]
 
+### Fixed / Changed（2026-11-13 PCI 解析纠错、CI 构建修复与 OTA 自更新链路适配 6677 后台）
+
+- **服务小区与基站测量矩阵 PCI 解析纠错**：
+  - 根因：oFono `NetworkMonitor.GetNeighborCellInformation` 上报的 `CellId` 是小区标识（NR 下可达 26 位 NCI 范围，实测出现过 1603 / 296，随测量波动），并非 PCI（合法范围 0-1007）；旧实现把它直接塞进邻区行的 `pci` 字段，导致矩阵显示「PCI 1603」这类超范围假值。
+  - 后端 `cells()`：邻区行改用独立 `cell_id` 字段上报，`pci`/`rsrp`/`rsrq` 置 null，不再用 Strength 伪造 RSRP；新增 `strength`（0-100）真实字段。
+  - 前端 `modem.js` / `network.js`：矩阵新增「Cell ID」「信号强度」列；PCI 列仅主服小区（oFono `PhysicalCellId`）有效，邻区显示「—」；无 PCI 的邻区锁定按钮禁用并提示「无 PCI 不可锁」。
+  - `tasks.rs` AT 模拟分支：`AT^MONSC` 在 oFono 无数据时输出空应答，不再编造默认 PCI 643 / ARFCN 504990。
+- **CI 构建修复（build.yml）**：
+  - `messense/rust-musl-cross:aarch64-musl` 镜像 entrypoint 不是 cargo，交叉构建命令由 `build --release` 修正为 `cargo build --release`，修复首跑「exec: build: executable file not found」失败。
+- **OTA 自更新链路适配 6677 后台**（面向 CI Release 的一键升级）：
+  - `check()` 解析 Release 资产：优先 `.tar.gz` 归档，新增 `sha256_url`（`SHA256SUMS` 固定资产）返回给前端。
+  - `download()` 摘要自动发现：payload 缺省时按文件名从同源 `SHA256SUMS`（含 `releases/latest/download/SHA256SUMS` 兜底）自动取 64 位摘要，前端无需手工填写。
+  - `extract()` 支持 gzip+tar 归档：按魔数识别 `.tar.gz`，手工解 tar 头（512 字节块，无新增 tar 依赖；gzip 走 `flate2`），只提取包内 `server` 可执行文件原子写入，其余条目一律丢弃，不执行包内脚本；纯二进制包保持向后兼容。
+  - `install()` 安装目标修正：由相对路径 `server`（受 cwd 影响）改为 `/proc/self/exe` 自身路径，任何目录启动都正确落在部署目录 `/home/root/6677/server`；备份 `server.bak` 同目录保留。
+  - 安装后自重启：延迟 1.5s 以退出码 75（EX_TEMPFAIL）退出，由设备侧 `panel_watchdog.sh`（10s 轮询 + 端口探活）自动拉起新二进制；前端安装后轮询免认证的 `/api/health`（5s 间隔，120s 超时）等待恢复并刷新版本徽标。
+  - `update.js`：文件选择支持 `.tar.gz` / `.zip` / `.bin`；下载请求自动透传 `sha256_url`；解包日志显示提取条目与大小。
+- **验证**：WSL musl 交叉编译通过（cargo check / 52 项单测 / 契约 verify / parity 全 PASS）；实机 `/api/cells` 复测邻区 `cell_id=1603` 且 `pci=null`，主服小区 `pci=128` 不受影响。
+
 ### Added / Changed（2026-11-13 WebUI 移动端响应式与弹窗安全视口全面优化）
 
 - **全分辨率响应式统一重构**：

@@ -196,22 +196,32 @@ function buildAdvanced(grid) {
       { label: '制式', render: (r) => safeText(r.technology || r.type) },
       { label: '频段', render: (r) => safeText(r.band) },
       { label: 'ARFCN', render: (r) => safeText(r.arfcn) },
-      { label: 'PCI', render: (r) => safeText(r.pci) },
+      // PCI 仅主服小区有效（oFono PhysicalCellId，0-1007）；
+      // 邻区上报的 CellId 是小区标识而非 PCI，显示在独立列。
+      { label: 'PCI', render: (r) => (r.pci != null && r.pci !== '' ? safeText(r.pci) : '—') },
+      { label: 'Cell ID', render: (r) => (r.cell_id != null ? safeText(r.cell_id) : '—') },
+      { label: 'RSRP (dBm)', render: (r) => (r.rsrp != null && r.rsrp !== '' ? safeText(r.rsrp) : '未测量') },
       {
-        label: ctx.t('common.actions'), align: 'right', render: (r) => [button('锁定', {
-          variant: 'danger sm',
-          onClick: async () => {
-            const ok = await ctx.confirm({ message: `锁定到 PCI ${safeText(r.pci)}？`, danger: true });
-            if (!ok) return;
-            try {
-              await post('/api/lock_cell', {
-                technology: r.technology || r.type || '',
-                arfcn: String(r.arfcn || ''), pci: String(r.pci || '')
-              });
-              ctx.toast.success(ctx.t('status.locked'));
-            } catch (e) { ctx.toast.error(ctx.t('common.requestFailed')); }
+        label: ctx.t('common.actions'), align: 'right', render: (r) => {
+          const canLock = r.pci != null && r.pci !== '';
+          if (!canLock) {
+            return button('无 PCI', { variant: 'ghost sm', disabled: true });
           }
-        })]
+          return button('锁定', {
+            variant: 'danger sm',
+            onClick: async () => {
+              const ok = await ctx.confirm({ message: `锁定到 PCI ${safeText(r.pci)}？`, danger: true });
+              if (!ok) return;
+              try {
+                await post('/api/lock_cell', {
+                  technology: r.technology || r.type || '',
+                  arfcn: String(r.arfcn || ''), pci: String(r.pci || '')
+                });
+                ctx.toast.success(ctx.t('status.locked'));
+              } catch (e) { ctx.toast.error(ctx.t('common.requestFailed')); }
+            }
+          });
+        }
       }
     ], rows: [], emptyText: '暂无小区数据'
   });
