@@ -38,6 +38,8 @@ max_package_bytes = 67108864
 # 本地手动上传的更新包仍强制要求 signature 字段（真机需接入设备公钥验签）。
 require_signature = true
 download_timeout_secs = 120
+# 安装完成后进程以退出码 75 退出，由设备侧 panel_watchdog.sh 自动拉起新二进制；
+# 部署目录须可写（/ 为 squashfs 只读，实机部署在 /home/root/6677）。
 
 [limits]
 request_timeout_secs = 15
