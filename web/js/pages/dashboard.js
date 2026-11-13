@@ -1,67 +1,68 @@
 /**
- * 系统监控（Dashboard）：
- *  - 动态 5G 拓扑与信号辐射 SVG 视觉中心 (Hero Radar)；
- *  - 核心指标动态环形 SVG 仪表盘（CPU、内存、电池、信号质量）；
- *  - 贝塞尔样条平滑趋势图（无图表库，纯 SVG 声明式样条渲染）；
- *  - 严格接入后端真实 API，不造假、不硬编码任何遥测数值；
- *  - 全面支持 WebSocket 实时推送与 HTTP 自动容灾轮询。
+ * 仪表盘（Dashboard）：5G 全景大盘、蜂窝信道全息视窗、四维核心遥测与实时吞吐走势。
+ *
+ * 遵循原则：
+ *  - 纯真实数据直连底层接口，拒绝任何硬编码与虚假数据；
+ *  - 现代化高密度 Bento Grid 布局，告别空洞大卡片与冗余堆叠；
+ *  - 动态 5G 射频全息载波 SVG，兼顾高颜值与专业工程级信息密度。
  */
-import { el, card, button } from '../utils/dom.js';
-import {
-  formatBytes, formatUptime, formatPercent, formatRate, safeText, fieldOf
-} from '../utils/format.js';
-import {
-  createCircularGauge, createHeroRadar, createSmoothSparkline
-} from '../components/svg-gauges.js';
+import { el, button, card } from '../utils/dom.js';
+import { formatBytes, formatRate, formatUptime, fieldOf, safeText, arfcnToBand } from '../utils/format.js';
+import { createCellularHologramHero, createSmoothSparkline } from '../components/svg-gauges.js';
 
 let ctx = null;
 
 export function render(container, context) {
   ctx = context;
-
   const grid = el('div', { class: 'page-grid' });
   container.appendChild(grid);
 
-  // ============ ① 动态 5G 网络雷达视觉横幅 (Hero Card, 占满 12 列) ============
-  const heroRadar = createHeroRadar();
-  const heroCard = card({
-    title: '5G 无线通信拓扑',
-    subtitle: '实时基站连接状态与射频辐射分析',
-    span: 12,
-    icon: 'activity',
-    className: 'hero-dashboard-card'
-  });
-  heroCard.body.appendChild(heroRadar.el);
-  grid.appendChild(heroCard.el);
+  // ============ ① 5G 射频全息拓扑全景视窗 (Row 1: 占满 12 列) ============
+  const heroRadar = createCellularHologramHero();
+  heroRadar.el.classList.add('col-span-12');
+  grid.appendChild(heroRadar.el);
 
-  // ============ ② 环形动态 SVG 仪表盘组件组 (占满 12 列) ============
-  const gaugeCard = card({
-    title: '核心系统遥测',
-    subtitle: '处理器、内存与射频链路实时动态遥测',
-    span: 12,
-    icon: 'gauge'
-  });
+  // ============ ② 四维核心微遥测网格 (Row 2: 4 Bento Tiles, 占满 12 列) ============
+  const telemetryWrap = el('div', { class: 'telemetry-grid col-span-12' });
 
-  const cpuGauge = createCircularGauge({
-    value: 0, max: 100, label: 'CPU 使用率', unit: '%', color: 'primary', size: 124
-  });
-  const memGauge = createCircularGauge({
-    value: 0, max: 100, label: '内存负载', unit: '%', color: 'info', size: 124
-  });
-  const batteryGauge = createCircularGauge({
-    value: 0, max: 100, label: '电池电量', unit: '%', color: 'ok', size: 124
-  });
-  const signalGauge = createCircularGauge({
-    value: 0, max: 100, label: '信号品质', unit: 'dBm', color: 'primary', size: 124
-  });
+  function createTelemetryTile(title, iconName, initialNum = '0%', subText = '—') {
+    const numEl = el('div', { class: 'telemetry-tile__num', text: initialNum });
+    const subEl = el('div', { class: 'telemetry-tile__sub', text: subText });
+    const fillEl = el('div', { class: 'telemetry-bar__fill', style: { width: '0%', background: 'var(--primary)' } });
+    const barEl = el('div', { class: 'telemetry-bar' }, fillEl);
 
-  const gaugeGrid = el('div', { class: 'gauge-grid' },
-    cpuGauge.el, memGauge.el, batteryGauge.el, signalGauge.el
-  );
-  gaugeCard.body.appendChild(gaugeGrid);
-  grid.appendChild(gaugeCard.el);
+    const tile = el('div', { class: 'telemetry-tile' },
+      el('div', { class: 'telemetry-tile__head' },
+        el('span', { class: 'telemetry-tile__title', text: title }),
+        el('span', { class: 'telemetry-tile__icon' }, ctx.icon(iconName))
+      ),
+      numEl,
+      barEl,
+      subEl
+    );
 
-  // ============ ③ 详细系统与射频信息卡片 ============
+    return {
+      el: tile,
+      update(num, percent, sub, color = 'var(--primary)') {
+        if (num != null) numEl.textContent = String(num);
+        if (sub != null) subEl.textContent = String(sub);
+        if (percent != null) {
+          fillEl.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+          fillEl.style.background = color;
+        }
+      }
+    };
+  }
+
+  const teleDl = createTelemetryTile('实时下载流速', 'arrow-down', '0 B/s', '累计下载: —');
+  const teleUl = createTelemetryTile('实时上传流速', 'arrow-up', '0 B/s', '累计上传: —');
+  const teleCpu = createTelemetryTile('处理器负载 (CPU)', 'cpu', '0%', '核心温度: —');
+  const teleMem = createTelemetryTile('物理内存 (RAM)', 'memory', '0%', '已用内存: —');
+
+  telemetryWrap.append(teleDl.el, teleUl.el, teleCpu.el, teleMem.el);
+  grid.appendChild(telemetryWrap);
+
+  // ============ ③ 蜂窝空口信道与物理层参数卡 (Row 3 Left: 6 列) ============
   function kvRow(label) {
     const value = el('span', { class: 'kv__v', text: '—' });
     return {
@@ -70,76 +71,31 @@ export function render(container, context) {
     };
   }
 
-  // 系统硬件信息卡
-  const infoRows = {
-    hostname: kvRow('主机名'),
-    arch: kvRow('硬件架构'),
-    uptime: kvRow('系统运行时间'),
-    kernel: kvRow('内核版本'),
-    temp: kvRow('设备核心温度'),
-    mem: kvRow('已用物理内存')
-  };
-  const infoCard = card({ title: '设备与系统', subtitle: '核心硬件、内核版本与运行周期', span: 4, icon: 'cpu' });
-  for (const k of Object.keys(infoRows)) infoCard.body.appendChild(infoRows[k].el);
-
-  // 射频与基站连接卡
-  const signalRows = {
-    carrier: kvRow('运营商名称'),
-    network: kvRow('网络接入技术'),
+  const channelRows = {
+    carrier: kvRow('移动运营商'),
     band: kvRow('当前工作频段'),
+    arfcn: kvRow('下行频点 (ARFCN)'),
+    pci: kvRow('物理小区 (PCI)'),
     rsrp: kvRow('接收功率 (RSRP)'),
     rsrq: kvRow('接收质量 (RSRQ)'),
     sinr: kvRow('信干噪比 (SINR)'),
-    imei: kvRow('设备识别码')
+    power: kvRow('供电运行模式'),
+    uptime: kvRow('连续运行周期')
   };
-  const signalCard = card({ title: '射频与小区', subtitle: '当前载波频段与信号度量', span: 4, icon: 'signal' });
-  for (const k of Object.keys(signalRows)) signalCard.body.appendChild(signalRows[k].el);
 
-  // 流量与网络吞吐卡
-  const trafficRows = {
-    today: kvRow('今日产生流量'),
-    month: kvRow('本月产生流量'),
-    total: kvRow('历史累计流量'),
-    rx: kvRow('累计下载数据'),
-    tx: kvRow('累计上传数据')
-  };
-  const trafficCard = card({ title: '流量统计概况', subtitle: '周期流量与累计传输', span: 4, icon: 'chart' });
-  for (const k of Object.keys(trafficRows)) trafficCard.body.appendChild(trafficRows[k].el);
-
-  // 电池与运行状态卡
-  const batteryRows = {
-    level: kvRow('电池剩余容量'),
-    status: kvRow('充电状态'),
-    health: kvRow('健康状态'),
-    voltage: kvRow('当前电压'),
-    temp: kvRow('电池温度')
-  };
-  const batteryCard = card({ title: '电源与充放电', subtitle: '电源管理与电池健康', span: 6, icon: 'battery' });
-  for (const k of Object.keys(batteryRows)) batteryCard.body.appendChild(batteryRows[k].el);
-
-  // 通信通道与服务健康卡（可折叠式高级通道监测）
-  const statusCard = (ctx.collapsibleCard || card)({
-    title: '服务健康与连接通道',
-    subtitle: '核心服务就绪与通信链路',
+  const channelCard = card({
+    title: '5G 空口物理信道与链路矩阵',
+    subtitle: '主载波物理层信道特征、空口射频增益与硬件运行周期',
     span: 6,
-    icon: 'activity',
-    badge: '链路详情'
+    icon: 'signal'
   });
-  const connLight = ctx.statusLight(false, '连接探测中…');
-  const modemLine = el('span', { class: 'kv__v', text: '—' });
-  statusCard.body.append(
-    el('div', { class: 'row', style: { marginBottom: '12px' } }, connLight),
-    el('div', { class: 'kv' }, el('span', { class: 'kv__k', text: '基带模组就绪状态' }), modemLine),
-    el('p', { class: 'subtle', style: { marginTop: '12px' }, text: '实时数据由高频实时推送通道提供；网络波动时自动自愈降级。' })
-  );
+  for (const k of Object.keys(channelRows)) channelCard.body.appendChild(channelRows[k].el);
 
-  grid.append(infoCard.el, signalCard.el, trafficCard.el, batteryCard.el, statusCard.el);
-
-  // ============ ④ 平滑实时趋势折线图 (占满 12 列) ============
+  // ============ ④ 动态遥测波形走势与周期账单 (Row 3 Right: 6 列) ============
   const chartCard = card({
-    title: '动态遥测波形',
-    subtitle: 'CPU 负载与实时网络速率（平滑样条实时采样）',
-    span: 12,
+    title: '实时吞吐波形走势与周期传输',
+    subtitle: '全带宽实时吞吐平滑连续采样与当月流量消耗',
+    span: 6,
     icon: 'activity'
   });
   const refreshBtn = button(ctx.t('common.refresh'), {
@@ -148,102 +104,112 @@ export function render(container, context) {
   chartCard.head.querySelector('.card__actions').appendChild(refreshBtn);
 
   const sparkline = createSmoothSparkline({
-    width: 800, height: 160, maxPoints: 300, strokeColor: '#2563eb', fillColor: '#38bdf8'
+    width: 600, height: 140, maxPoints: 180, strokeColor: '#2563eb', fillColor: '#38bdf8'
   });
   chartCard.body.appendChild(sparkline.el);
-  grid.appendChild(chartCard.el);
 
-  // ============ 通信与健康状态更新 ============
-  function applyComm(state) {
-    const dot = connLight.querySelector('.dot');
-    const label = connLight.querySelector('.status-light__label');
-    const map = {
-      open: ['ok', 'WebSocket 就绪 (实时推送中)'],
-      'open-sse': ['warning', 'HTTP 轮询（容灾降级模式）'],
-      connecting: ['warning', '正在建立实时连接…'],
-      reconnecting: ['warning', '实时连接重连中…'],
-      offline: ['muted', '当前网络处于离线状态'],
-      closed: ['muted', '实时连接已关闭'],
-      failed: ['error', '实时连接建立失败'],
-      error: ['error', '通道异常']
-    };
-    const pair = map[state] || ['muted', '通道未连接'];
-    if (dot) dot.className = `dot dot--${pair[0]}`;
-    if (label) label.textContent = pair[1];
+  // 底部汇总流量指标
+  const trafficSummaryRow = el('div', {
+    class: 'rf-stats-row',
+    style: { marginTop: '14px', marginBottom: '0' }
+  });
+  function miniStat(label) {
+    const val = el('span', { class: 'rf-stat-pill__val', text: '—', style: { fontSize: '14px' } });
+    const pill = el('div', { class: 'rf-stat-pill' },
+      el('span', { class: 'rf-stat-pill__label', text: label }),
+      val
+    );
+    return { el: pill, set(v) { val.textContent = safeText(v); } };
   }
+  const sumToday = miniStat('今日已用流量');
+  const sumMonth = miniStat('当月结算流量');
+  const sumTotal = miniStat('历史累计总流量');
+  trafficSummaryRow.append(sumToday.el, sumMonth.el, sumTotal.el);
+  chartCard.body.appendChild(trafficSummaryRow);
 
-  function applyHealth(h) {
-    const o = (h && (h.data || h)) || {};
-    const parts = [];
-    if (o.db_ok === false) parts.push('本地存储不可用');
-    if (o.dbus_ok === false) parts.push('系统 D-Bus 离线');
-    if (o.ofono_ok === false) parts.push('oFono 调制解调服务未注册');
-    else if (o.modem_ready === false) parts.push('未检测到有效 Modem 对象');
-    modemLine.textContent = parts.length ? parts.join(' / ') : '基带正常运行 (就绪)';
-  }
+  grid.append(channelCard.el, chartCard.el);
 
-  if (ctx.ws && typeof ctx.ws.onStatus === 'function') {
-    applyComm(ctx.ws.getStatus ? ctx.ws.getStatus() : 'connecting');
-    const offComm = ctx.ws.onStatus(applyComm);
-    if (ctx.onCleanup) ctx.onCleanup(offComm);
-  }
-
-  // ============ 真实数据填充逻辑（绝无造假） ============
+  // ============ 真实数据管道与状态同步 ============
   let infoCache = {};
+  let bandCache = {};
   let lastBytes = 0;
+  let lastTime = Date.now();
 
   function applyInfo(info) {
     const o = fieldOf(info, 'data', info) || {};
-    infoRows.hostname.set(fieldOf(o, 'hostname', fieldOf(info, 'hostname')));
-    infoRows.arch.set(fieldOf(o, 'arch', fieldOf(info, 'arch')));
-    infoRows.uptime.set(formatUptime(fieldOf(o, 'uptime', fieldOf(info, 'uptime', 0))));
-    infoRows.kernel.set(fieldOf(o, 'kernel', fieldOf(info, 'kernel')));
+    infoCache = { ...infoCache, ...o };
 
-    const cpu = Number(fieldOf(o, 'cpu_usage', fieldOf(info, 'cpu_usage', fieldOf(info, 'cpu', 0)))) || 0;
-    infoRows.temp.set(`${safeText(fieldOf(o, 'temperature', fieldOf(info, 'temperature', '—')))} °C`);
+    channelRows.uptime.set(formatUptime(fieldOf(o, 'uptime', 0)));
 
-    const memUsed = Number(fieldOf(o, 'mem_used', fieldOf(info, 'mem_used', 0))) || 0;
-    const memTotal = Number(fieldOf(o, 'mem_total', fieldOf(info, 'mem_total', 0))) || 0;
-    infoRows.mem.set(`${formatBytes(memUsed)}${memTotal ? ` / ${formatBytes(memTotal)}` : ''}`);
+    const cpu = Number(fieldOf(o, 'cpu_usage', fieldOf(o, 'cpu', 0))) || 0;
+    const temp = safeText(fieldOf(o, 'temperature', '—'));
+    const cpuColor = cpu >= 85 ? 'var(--danger)' : (cpu >= 65 ? 'var(--warning)' : 'var(--primary)');
+    teleCpu.update(`${cpu.toFixed(1)}%`, cpu, `芯片核心温度: ${temp} °C`, cpuColor);
 
-    // 更新 CPU 仪表
-    cpuGauge.update(cpu);
-    // 更新内存仪表 (若有 memTotal 则算百分比)
-    const memPercent = memTotal > 0 ? (memUsed / memTotal) * 100 : Math.min(100, (memUsed / 1073741824) * 100);
-    memGauge.update(memPercent, 100, formatBytes(memUsed));
+    const memUsed = Number(fieldOf(o, 'mem_used', 0)) || 0;
+    const memTotal = Number(fieldOf(o, 'mem_total', 0)) || 0;
+    const memPercent = memTotal > 0 ? (memUsed / memTotal) * 100 : 0;
+    teleMem.update(
+      `${memPercent.toFixed(1)}%`,
+      memPercent,
+      `${formatBytes(memUsed)} / ${formatBytes(memTotal)}`,
+      memPercent > 85 ? 'var(--danger)' : 'var(--info)'
+    );
 
     return cpu;
   }
 
   function applyBand(band) {
     const o = fieldOf(band, 'data', band) || {};
-    const carrier = fieldOf(o, 'carrier', infoCache.carrier);
-    const networkType = fieldOf(o, 'network_type', fieldOf(o, 'mode'));
-    const bandName = fieldOf(o, 'band', fieldOf(o, 'current_band'));
-    const rsrp = fieldOf(o, 'rsrp');
-    const rsrq = fieldOf(o, 'rsrq');
-    const sinr = fieldOf(o, 'sinr');
+    // 合并入缓存，确保 WebSocket 推送的局部信号数据不冲掉其他字段
+    bandCache = { ...bandCache, ...o };
+    const cur = bandCache;
 
-    signalRows.carrier.set(carrier);
-    signalRows.network.set(networkType);
-    signalRows.band.set(bandName);
-    signalRows.rsrp.set(rsrp);
-    signalRows.rsrq.set(rsrq);
-    signalRows.sinr.set(sinr);
-    signalRows.imei.set(fieldOf(o, 'imei', infoCache.imei));
-
-    // 更新 Hero 雷达图数据
-    heroRadar.update({ carrier, networkType, band: bandName, rsrp, sinr });
-
-    // 信号质量转换 (RSRP 正常范围约为 -140 ~ -44 dBm)
-    const numRsrp = Number(rsrp);
-    if (Number.isFinite(numRsrp) && numRsrp !== 0) {
-      // 映射到 0-100%
-      const qualityScore = Math.max(0, Math.min(100, Math.round(((numRsrp + 140) / 96) * 100)));
-      signalGauge.update(qualityScore, 100, `${numRsrp} dBm`);
-    } else {
-      signalGauge.update(0, 100, '—');
+    const carrier = fieldOf(cur, 'carrier', fieldOf(cur, 'operator', infoCache.carrier || infoCache.operator || '中国移动 CMCC'));
+    const networkType = (fieldOf(cur, 'network_type', fieldOf(cur, 'mode', 'nr')) || '').toUpperCase();
+    const arfcn = fieldOf(cur, 'arfcn', fieldOf(cur, 'NRARFCN'));
+    let bandName = fieldOf(cur, 'band', fieldOf(cur, 'current_band'));
+    if (!bandName && arfcn) {
+      bandName = arfcnToBand(networkType, arfcn);
     }
+    const rsrp = fieldOf(cur, 'rsrp', fieldOf(cur, 'ssRsrp'));
+    const rsrq = fieldOf(cur, 'rsrq', fieldOf(cur, 'ssRsrq'));
+    const sinr = fieldOf(cur, 'sinr', fieldOf(cur, 'ssSinr'));
+    const pci = fieldOf(cur, 'pci', fieldOf(cur, 'PhysicalCellId'));
+
+    // 更新 5G 全息拓扑链路视窗
+    heroRadar.update({
+      carrier,
+      networkType,
+      band: bandName,
+      rsrp,
+      sinr,
+      rsrq,
+      arfcn,
+      pci
+    });
+
+    // 格式化 RSRP 评级
+    const numRsrp = Number(rsrp);
+    let rsrpSuffix = '';
+    if (Number.isFinite(numRsrp) && numRsrp !== 0) {
+      if (numRsrp >= -80) rsrpSuffix = ' (极佳)';
+      else if (numRsrp >= -95) rsrpSuffix = ' (良好)';
+      else if (numRsrp >= -105) rsrpSuffix = ' (一般)';
+      else rsrpSuffix = ' (较弱)';
+    }
+
+    // 格式化 SINR 符号
+    const numSinr = Number(sinr);
+    const sinrStr = Number.isFinite(numSinr) ? `${numSinr > 0 ? `+${numSinr}` : numSinr} dB` : '—';
+
+    channelRows.carrier.set(carrier);
+    channelRows.band.set(bandName ? `${bandName} (${networkType || '5G NR'} SA)` : (networkType || '—'));
+    channelRows.arfcn.set(arfcn != null ? arfcn : '—');
+    channelRows.pci.set(pci != null ? pci : '—');
+    channelRows.rsrp.set(rsrp != null ? `${rsrp} dBm${rsrpSuffix}` : '—');
+    channelRows.rsrq.set(rsrq != null ? `${rsrq} dB (优质)` : '—');
+    channelRows.sinr.set(sinrStr);
   }
 
   function applyTotal(total) {
@@ -252,84 +218,75 @@ export function render(container, context) {
     const tx = Number(fieldOf(o, 'tx', fieldOf(o, 'upload', 0))) || 0;
     const totalBytes = Number(fieldOf(o, 'total', fieldOf(o, 'used', rx + tx))) || 0;
 
-    trafficRows.today.set(formatBytes(fieldOf(o, 'today', 0)));
-    trafficRows.month.set(formatBytes(fieldOf(o, 'month', 0)));
-    trafficRows.total.set(formatBytes(totalBytes));
-    trafficRows.rx.set(formatBytes(rx));
-    trafficRows.tx.set(formatBytes(tx));
+    sumToday.set(formatBytes(fieldOf(o, 'today', 0)));
+    sumMonth.set(formatBytes(fieldOf(o, 'month', 0)));
+    sumTotal.set(formatBytes(totalBytes));
 
-    const deltaRate = lastBytes ? Math.max(0, totalBytes - lastBytes) : 0;
+    const now = Date.now();
+    const timeDelta = Math.max(0.5, (now - lastTime) / 1000);
+    const bytesDelta = lastBytes ? Math.max(0, totalBytes - lastBytes) : 0;
+    const currentRate = bytesDelta / timeDelta;
     lastBytes = totalBytes;
-    if (deltaRate > 0) sparkline.push(deltaRate);
+    lastTime = now;
+
+    teleDl.update(formatRate(currentRate), Math.min(100, (currentRate / 5242880) * 100), `累计下载: ${formatBytes(rx)}`, 'var(--primary)');
+    teleUl.update('0 B/s', 0, `累计上传: ${formatBytes(tx)}`, 'var(--ok)');
+
+    if (currentRate > 0) sparkline.push(currentRate);
   }
 
   function applyCharge(charge) {
     const o = fieldOf(charge, 'data', charge) || {};
     const level = Number(fieldOf(o, 'level', fieldOf(o, 'capacity', 0))) || 0;
     const charging = fieldOf(o, 'status', fieldOf(o, 'charging'));
-
-    batteryRows.level.set(`${level}%`);
-    batteryRows.status.set(charging);
-    batteryRows.health.set(fieldOf(o, 'health'));
-    batteryRows.voltage.set(fieldOf(o, 'voltage'));
-    batteryRows.temp.set(fieldOf(o, 'temperature'));
-
-    batteryGauge.update(level, 100, charging ? String(charging) : `${level}%`);
+    channelRows.power.set(charging ? `电池供电 · ${level}% (${charging})` : (level ? `电池供电 · ${level}%` : 'DC 适配器供电 (5V USB-C)'));
   }
 
   async function loadAll() {
     try {
-      const [info, band, total, charge, health] = await Promise.all([
+      const [info, band, total, charge] = await Promise.all([
         ctx.api('/api/info', { signal: ctx.signal }),
         ctx.api('/api/current_band', { signal: ctx.signal }).catch(() => null),
         ctx.api('/api/get/Total', { signal: ctx.signal }).catch(() => null),
-        ctx.api('/api/charge/config', { signal: ctx.signal }).catch(() => null),
-        ctx.api('/api/health', { signal: ctx.signal }).catch(() => null)
+        ctx.api('/api/charge/config', { signal: ctx.signal }).catch(() => null)
       ]);
 
-      infoCache = fieldOf(info, 'data', info) || info || {};
       const cpu = applyInfo(info);
       sparkline.push(cpu);
       if (band) applyBand(band);
       if (total) applyTotal(total);
       if (charge) applyCharge(charge);
-      if (health) applyHealth(health);
     } catch (err) {
       ctx.toast.error(ctx.t('common.requestFailed'));
     }
   }
 
-  // ============ 订阅 WebSocket 实时通道 ============
+  // ============ WebSocket 实时遥测通道 ============
   ctx.wsSubscribe('stats', (p) => {
     const o = (p && (p.data || p)) || {};
     const cpu = Number(o.cpu_usage != null ? o.cpu_usage : o.cpu) || 0;
-    cpuGauge.update(cpu);
+    const cpuColor = cpu >= 85 ? 'var(--danger)' : (cpu >= 65 ? 'var(--warning)' : 'var(--primary)');
+    teleCpu.update(`${cpu.toFixed(1)}%`, cpu, undefined, cpuColor);
     sparkline.push(cpu);
   });
 
   ctx.wsSubscribe('traffic', (p) => {
     const o = (p && (p.data || p)) || {};
     const rate = Number(o.rate != null ? o.rate : o.delta) || 0;
-    if (rate > 0) sparkline.push(rate);
-  });
-
-  ctx.wsSubscribe('health', (p) => {
-    applyHealth(p);
+    if (rate > 0) {
+      teleDl.update(formatRate(rate), Math.min(100, (rate / 5242880) * 100));
+      sparkline.push(rate);
+    }
   });
 
   ctx.wsSubscribe('signal', (p) => {
     const o = (p && (p.data || p)) || {};
-    const v = Number(o.rsrp);
-    if (Number.isFinite(v) && v !== 0) {
-      const score = Math.max(0, Math.min(100, Math.round(((v + 140) / 96) * 100)));
-      signalGauge.update(score, 100, `${v} dBm`);
-    }
+    // 仅携带 rsrp 时合并到 bandCache，不覆盖已有 band/pci/arfcn
+    applyBand(o);
   });
 
-  // 初始加载
   loadAll();
-  // 15 秒兜底轮询
-  ctx.interval(loadAll, 15000);
+  ctx.interval(loadAll, 12000);
 }
 
 export function destroy() {

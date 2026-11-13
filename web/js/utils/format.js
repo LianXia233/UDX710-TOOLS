@@ -151,3 +151,40 @@ export function readPath(obj, path) {
   }
   return node;
 }
+
+/**
+ * ARFCN 频点转频段名称 (3GPP NR / LTE)
+ */
+export function arfcnToBand(tech, arfcn) {
+  const n = Number(arfcn);
+  if (!Number.isFinite(n) || n <= 0) return '';
+  const t = String(tech || '').toLowerCase();
+  if (t.includes('nr') || t.includes('5g') || n > 100000) {
+    if (n >= 151600 && n <= 160600) return 'NR n28';
+    if (n >= 173800 && n <= 178800) return 'NR n5';
+    if (n >= 185000 && n <= 192000) return 'NR n8';
+    if (n >= 361000 && n <= 376000) return 'NR n3';
+    if (n >= 422000 && n <= 434000) return 'NR n1';
+    if (n >= 499200 && n <= 537999) return 'NR n41';
+    if (n >= 620000 && n <= 653333) return 'NR n78';
+    if (n >= 653334 && n <= 680000) return 'NR n77';
+    if (n >= 693333 && n <= 733333) return 'NR n79';
+    return `NR (${n})`;
+  } else {
+    if (n >= 0 && n <= 599) return 'LTE B1';
+    if (n >= 600 && n <= 1199) return 'LTE B2';
+    if (n >= 1200 && n <= 1949) return 'LTE B3';
+    if (n >= 1950 && n <= 2399) return 'LTE B4';
+    if (n >= 2400 && n <= 2649) return 'LTE B5';
+    if (n >= 2750 && n <= 3449) return 'LTE B7';
+    if (n >= 3450 && n <= 3799) return 'LTE B8';
+    if (n >= 6150 && n <= 6449) return 'LTE B20';
+    if (n >= 9210 && n <= 9659) return 'LTE B28';
+    if (n >= 36200 && n <= 36349) return 'LTE B34';
+    if (n >= 37750 && n <= 38249) return 'LTE B38';
+    if (n >= 38250 && n <= 38649) return 'LTE B39';
+    if (n >= 38650 && n <= 39649) return 'LTE B40';
+    if (n >= 39650 && n <= 41589) return 'LTE B41';
+    return `LTE (${n})`;
+  }
+}

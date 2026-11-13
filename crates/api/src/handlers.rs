@@ -220,7 +220,12 @@ pub async fn phone_case_set(State(s): State<AppState>, Json(b): Json<Value>) -> 
 // ============================ 网络 / Modem ============================
 
 pub async fn at(State(s): State<AppState>, Json(b): Json<Value>) -> ApiResult<Json<Value>> {
-    done(s.services.modem.execute_at(field(&b, "command"))).await
+    let cmd = if !field(&b, "command").is_empty() {
+        field(&b, "command")
+    } else {
+        field(&b, "cmd")
+    };
+    done(s.services.modem.execute_at(cmd)).await
 }
 
 pub async fn set_network(State(s): State<AppState>, Json(b): Json<Value>) -> ApiResult<Json<Value>> {

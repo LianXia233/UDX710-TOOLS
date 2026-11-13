@@ -1,115 +1,94 @@
 /**
- * 流量统计（Traffic Monitor）：
- *  - 概览指标卡片（今日 / 本月 / 累计 / 下载 / 上传）；
- *  - 动态 SVG 吞吐量水流计量通道（Throughput Stream Pipe）；
- *  - 贝塞尔平滑实时速率波形折线；
- *  - 流量上限自动断网设置（POST /api/set/total）；
- *  - 真实直连 /api/get/Total 与 /api/get/set，零假数据。
+ * 流量统计：展示今日 / 本月 / 累计流量，双向流速仪表，月度超额断网保护配置。
+ * 纯真实数据直连底层接口，高密度现代化双向流速控制台。
  */
 import { el, button, field, switchField } from '../utils/dom.js';
-import { fieldOf, safeText, formatBytes, formatRate } from '../utils/format.js';
-import { createSmoothSparkline } from '../components/svg-gauges.js';
+import { formatBytes, formatRate, fieldOf, safeText } from '../utils/format.js';
+import { createSmoothSparkline, createSpeedArcGauge } from '../components/svg-gauges.js';
 
 let ctx = null;
 let sparkline = null;
 let lastBytes = 0;
+let lastTime = Date.now();
+let peakDl = 0;
+let peakUl = 0;
 const refs = {};
-
-/** 动态 SVG 流量水流管道指示组件 */
-function createTrafficStreamPipe() {
-  const svg = el('svg:svg', {
-    class: 'traffic-stream-svg',
-    viewBox: '0 0 680 110',
-    preserveAspectRatio: 'xMidYMid meet',
-    role: 'img',
-    'aria-label': '实时数据吞吐水流指示'
-  });
-
-  const defs = el('svg:defs');
-  const rxGrad = el('svg:linearGradient', { id: 'rxGrad', x1: '0%', y1: '0%', x2: '100%', y2: '0%' },
-    el('svg:stop', { offset: '0%', 'stop-color': '#3b82f6', 'stop-opacity': '0.1' }),
-    el('svg:stop', { offset: '50%', 'stop-color': '#06b6d4', 'stop-opacity': '0.9' }),
-    el('svg:stop', { offset: '100%', 'stop-color': '#10b981', 'stop-opacity': '0.2' })
-  );
-  const txGrad = el('svg:linearGradient', { id: 'txGrad', x1: '100%', y1: '0%', x2: '0%', y2: '0%' },
-    el('svg:stop', { offset: '0%', 'stop-color': '#8b5cf6', 'stop-opacity': '0.1' }),
-    el('svg:stop', { offset: '50%', 'stop-color': '#ec4899', 'stop-opacity': '0.85' }),
-    el('svg:stop', { offset: '100%', 'stop-color': '#f59e0b', 'stop-opacity': '0.2' })
-  );
-  defs.append(rxGrad, txGrad);
-  svg.appendChild(defs);
-
-  // 下行数据通道
-  const rxPipe = el('svg:rect', {
-    x: '40', y: '24', width: '600', height: '22', rx: '11',
-    fill: 'var(--surface-muted)', stroke: 'var(--glass-border-subtle)', 'stroke-width': '1'
-  });
-  const rxStream = el('svg:line', {
-    x1: '50', y1: '35', x2: '630', y2: '35',
-    stroke: 'url(#rxGrad)', 'stroke-width': '10', 'stroke-linecap': 'round',
-    'stroke-dasharray': '24 80', 'stroke-dashoffset': '0'
-  },
-    el('svg:animate', {
-      attributeName: 'stroke-dashoffset', from: '0', to: '-520', dur: '2.5s', repeatCount: 'indefinite'
-    })
-  );
-
-  // 上行数据通道
-  const txPipe = el('svg:rect', {
-    x: '40', y: '64', width: '600', height: '22', rx: '11',
-    fill: 'var(--surface-muted)', stroke: 'var(--glass-border-subtle)', 'stroke-width': '1'
-  });
-  const txStream = el('svg:line', {
-    x1: '50', y1: '75', x2: '630', y2: '75',
-    stroke: 'url(#txGrad)', 'stroke-width': '10', 'stroke-linecap': 'round',
-    'stroke-dasharray': '24 80', 'stroke-dashoffset': '0'
-  },
-    el('svg:animate', {
-      attributeName: 'stroke-dashoffset', from: '-520', to: '0', dur: '3.2s', repeatCount: 'indefinite'
-    })
-  );
-
-  // 左右标识文字
-  const rxLabel = el('svg:text', {
-    x: '50', y: '16', fill: 'var(--primary)', 'font-size': '11', 'font-weight': '700', text: '▼ 下载流速 (Downlink)'
-  });
-  const txLabel = el('svg:text', {
-    x: '50', y: '100', fill: 'var(--warning)', 'font-size': '11', 'font-weight': '700', text: '▲ 上传流速 (Uplink)'
-  });
-
-  const rxRateVal = el('svg:text', {
-    x: '630', y: '16', 'text-anchor': 'end', fill: 'var(--text)', 'font-family': 'var(--mono)', 'font-size': '11', 'font-weight': '700', text: '—'
-  });
-  const txRateVal = el('svg:text', {
-    x: '630', y: '100', 'text-anchor': 'end', fill: 'var(--text)', 'font-family': 'var(--mono)', 'font-size': '11', 'font-weight': '700', text: '—'
-  });
-
-  svg.append(rxPipe, rxStream, txPipe, txStream, rxLabel, txLabel, rxRateVal, txRateVal);
-
-  return {
-    el: svg,
-    updateRate(rx, tx) {
-      if (rx != null) rxRateVal.textContent = formatRate(rx);
-      if (tx != null) txRateVal.textContent = formatRate(tx);
-    }
-  };
-}
-
-function statBox(label, id) {
-  return el('div', { class: 'stat' },
-    el('div', { class: 'stat__value', id, text: '—' }),
-    el('div', { class: 'stat__label', text: label }));
-}
 
 export function render(container, context) {
   ctx = context;
   lastBytes = 0;
+  lastTime = Date.now();
+  peakDl = 0;
+  peakUl = 0;
 
   const grid = el('div', { class: 'page-grid' });
   container.appendChild(grid);
 
-  // 流量概览卡
-  const overview = ctx.card({ title: '移动数据流量概览', subtitle: '周期数据使用量与累计传输消耗', span: 12, icon: 'chart' });
+  // ============ ① 实时双向流速仪表站 (Row 1: 占满 12 列) ============
+  const throughputWrap = el('div', { class: 'throughput-grid col-span-12' });
+
+  // 下行仪表卡 (Downlink)
+  const dlArc = createSpeedArcGauge({ label: '下行流速', color: '#2563eb' });
+  const dlRateNum = el('span', { class: 'speed-card__rate', text: '0' });
+  const dlRateUnit = el('span', { class: 'speed-card__unit', text: 'B/s' });
+  const dlPeakText = el('span', { class: 'badge badge--neutral', text: '峰值: 0 B/s' });
+  const dlTodayTotal = el('span', { class: 'speed-card__total-item' }, '今日: ', el('strong', { id: 'speed-dl-today', text: '0 B' }));
+  const dlMonthTotal = el('span', { class: 'speed-card__total-item' }, '本月: ', el('strong', { id: 'speed-dl-month', text: '0 B' }));
+
+  const dlCard = el('div', { class: 'speed-card speed-card--down' },
+    el('div', { class: 'speed-card__head' },
+      el('span', { class: 'speed-card__label' },
+        el('span', { style: { color: 'var(--primary)', fontWeight: '900' }, text: '▼' }),
+        '下行下载实时流速 (Downlink)'
+      ),
+      dlPeakText
+    ),
+    el('div', { class: 'row', style: { alignItems: 'center', justifyContent: 'space-between', marginTop: '6px' } },
+      el('div', { class: 'speed-card__rate-row' }, dlRateNum, dlRateUnit),
+      dlArc.el
+    ),
+    el('div', { class: 'speed-card__totals' }, dlTodayTotal, dlMonthTotal)
+  );
+
+  // 上行仪表卡 (Uplink)
+  const ulArc = createSpeedArcGauge({ label: '上行流速', color: '#059669', trackColor: 'rgba(5, 150, 105, 0.12)' });
+  const ulRateNum = el('span', { class: 'speed-card__rate', text: '0' });
+  const ulRateUnit = el('span', { class: 'speed-card__unit', text: 'B/s' });
+  const ulPeakText = el('span', { class: 'badge badge--neutral', text: '峰值: 0 B/s' });
+  const ulTodayTotal = el('span', { class: 'speed-card__total-item' }, '今日: ', el('strong', { id: 'speed-ul-today', text: '0 B' }));
+  const ulMonthTotal = el('span', { class: 'speed-card__total-item' }, '本月: ', el('strong', { id: 'speed-ul-month', text: '0 B' }));
+
+  const ulCard = el('div', { class: 'speed-card speed-card--up' },
+    el('div', { class: 'speed-card__head' },
+      el('span', { class: 'speed-card__label' },
+        el('span', { style: { color: 'var(--ok)', fontWeight: '900' }, text: '▲' }),
+        '上行上传实时流速 (Uplink)'
+      ),
+      ulPeakText
+    ),
+    el('div', { class: 'row', style: { alignItems: 'center', justifyContent: 'space-between', marginTop: '6px' } },
+      el('div', { class: 'speed-card__rate-row' }, ulRateNum, ulRateUnit),
+      ulArc.el
+    ),
+    el('div', { class: 'speed-card__totals' }, ulTodayTotal, ulMonthTotal)
+  );
+
+  throughputWrap.append(dlCard, ulCard);
+  grid.appendChild(throughputWrap);
+
+  // ============ ② 移动数据流量概览卡 (Row 2 Left: 6 列) ============
+  function statBox(label, id) {
+    return el('div', { class: 'stat' },
+      el('div', { class: 'stat__value', id, text: '—' }),
+      el('div', { class: 'stat__label', text: label }));
+  }
+
+  const overview = ctx.card({
+    title: '移动蜂窝数据流量统计',
+    subtitle: '结算周期内数据传输消耗与全周期累计量',
+    span: 6,
+    icon: 'chart'
+  });
   const refreshBtn = button(ctx.t('common.refresh'), { variant: 'ghost sm', icon: 'refresh', onClick: loadTotal });
   overview.head.querySelector('.card__actions').appendChild(refreshBtn);
 
@@ -117,34 +96,28 @@ export function render(container, context) {
     statBox('今日已用流量', 'tf-today'),
     statBox('本月已用流量', 'tf-month'),
     statBox('历史累计总流量', 'tf-total'),
-    statBox('累计接收 (RX)', 'tf-rx'),
-    statBox('累计发送 (TX)', 'tf-tx')
+    statBox('累计下载 (RX)', 'tf-rx'),
+    statBox('累计上传 (TX)', 'tf-tx')
   ));
 
-  refs.progress = el('span', { style: { width: '0%' } });
-  refs.progressText = el('span', { class: 'muted', style: { marginLeft: '8px' }, text: '0%' });
-  overview.body.appendChild(el('div', { style: { marginTop: '20px' } },
+  refs.progress = el('span', { style: { width: '0%', background: 'linear-gradient(90deg, #2563eb, #06b6d4)' } });
+  refs.progressText = el('span', { class: 'muted', style: { marginLeft: '8px', fontSize: '11.5px' }, text: '0%' });
+  overview.body.appendChild(el('div', { style: { marginTop: '16px' } },
     el('div', { class: 'row', style: { justifyContent: 'space-between', marginBottom: '6px' } },
-      el('span', { class: 'field__label', text: '月度流量使用进度' }),
+      el('span', { class: 'field__label', text: '月度流量使用进度与配额' }),
       refs.progressText
     ),
     el('div', { class: 'progress' }, refs.progress)
   ));
   grid.appendChild(overview.el);
 
-  // 动态数据水流指示卡
-  const streamVis = createTrafficStreamPipe();
-  const streamCard = ctx.card({
-    title: '网络数据吞吐流速',
-    subtitle: '双向管道数据吞吐实时渲染',
-    span: 12,
-    icon: 'activity'
+  // ============ ③ 月度流量超额断网保护卡 (Row 2 Right: 6 列) ============
+  const limitCard = ctx.card({
+    title: '月度流量超额断网保护',
+    subtitle: '达到指定阈值后自动切断移动蜂窝数据',
+    span: 6,
+    icon: 'shield'
   });
-  streamCard.body.appendChild(streamVis.el);
-  grid.appendChild(streamCard.el);
-
-  // 流量上限与限制设置卡
-  const limitCard = ctx.card({ title: '月度流量断网保护', subtitle: '达到指定阈值后自动切断移动数据', span: 6, icon: 'shield' });
   const enable = switchField({ label: '启用月度流量超额断网', checked: false });
   const limitInput = field({
     label: '月度额度上限（GB）', name: 'limit', type: 'number', value: '10',
@@ -175,15 +148,62 @@ export function render(container, context) {
   );
   grid.appendChild(limitCard.el);
 
-  // 实时速率平滑趋势卡
-  const chartCard = ctx.card({ title: '实时吞吐波形走势', subtitle: '网络速率动态采样', span: 6, icon: 'activity' });
+  // ============ ④ 实时速率平滑趋势卡 (Row 3: 12 列) ============
+  const chartCard = ctx.card({
+    title: '动态遥测吞吐波形走势',
+    subtitle: '下行实时传输速率平滑波形采样',
+    span: 12,
+    icon: 'activity'
+  });
   sparkline = createSmoothSparkline({
-    width: 600, height: 160, maxPoints: 300, strokeColor: '#0ea5e9', fillColor: '#38bdf8'
+    width: 800, height: 160, maxPoints: 300, strokeColor: '#0ea5e9', fillColor: '#38bdf8'
   });
   chartCard.body.appendChild(sparkline.el);
   grid.appendChild(chartCard.el);
 
-  // ============ 真实 API 载入 ============
+  // ============ 速率分解显示辅助 ============
+  function updateSpeedMeter(dlBytesPerSec, ulBytesPerSec = 0) {
+    const formattedDl = formatRate(dlBytesPerSec);
+    const partsDl = formattedDl.split(' ');
+    if (partsDl.length === 2) {
+      dlRateNum.textContent = partsDl[0];
+      dlRateUnit.textContent = partsDl[1];
+    } else {
+      dlRateNum.textContent = formattedDl;
+      dlRateUnit.textContent = '';
+    }
+
+    if (dlBytesPerSec > peakDl) {
+      peakDl = dlBytesPerSec;
+      dlPeakText.textContent = `峰值: ${formatRate(peakDl)}`;
+    }
+
+    // 更新弧度 (按 10MB/s 标定)
+    dlArc.update(Math.min(1, dlBytesPerSec / 10485760));
+
+    const formattedUl = formatRate(ulBytesPerSec);
+    const partsUl = formattedUl.split(' ');
+    if (partsUl.length === 2) {
+      ulRateNum.textContent = partsUl[0];
+      ulRateUnit.textContent = partsUl[1];
+    } else {
+      ulRateNum.textContent = formattedUl;
+      ulRateUnit.textContent = '';
+    }
+
+    if (ulBytesPerSec > peakUl) {
+      peakUl = ulBytesPerSec;
+      ulPeakText.textContent = `峰值: ${formatRate(peakUl)}`;
+    }
+
+    ulArc.update(Math.min(1, ulBytesPerSec / 5242880));
+  }
+
+  function setStat(id, v) {
+    const elNode = container.querySelector(`#${id}`);
+    if (elNode) elNode.textContent = safeText(v);
+  }
+
   async function loadTotal() {
     try {
       const res = await ctx.api('/api/get/Total', { signal: ctx.signal });
@@ -191,22 +211,39 @@ export function render(container, context) {
       const rx = Number(fieldOf(o, 'rx', fieldOf(o, 'download', 0))) || 0;
       const tx = Number(fieldOf(o, 'tx', fieldOf(o, 'upload', 0))) || 0;
       const total = Number(fieldOf(o, 'total', fieldOf(o, 'used', rx + tx))) || 0;
+      const today = Number(fieldOf(o, 'today', 0)) || 0;
+      const month = Number(fieldOf(o, 'month', 0)) || 0;
 
-      const setNode = (id, text) => {
-        const n = document.getElementById(id);
-        if (n) n.textContent = text;
-      };
+      setStat('tf-today', formatBytes(today));
+      setStat('tf-month', formatBytes(month));
+      setStat('tf-total', formatBytes(total));
+      setStat('tf-rx', formatBytes(rx));
+      setStat('tf-tx', formatBytes(tx));
 
-      setNode('tf-today', formatBytes(fieldOf(o, 'today', 0)));
-      setNode('tf-month', formatBytes(fieldOf(o, 'month', 0)));
-      setNode('tf-total', formatBytes(total));
-      setNode('tf-rx', formatBytes(rx));
-      setNode('tf-tx', formatBytes(tx));
+      const dlToday = container.querySelector('#speed-dl-today');
+      const dlMonth = container.querySelector('#speed-dl-month');
+      if (dlToday) dlToday.textContent = formatBytes(today);
+      if (dlMonth) dlMonth.textContent = formatBytes(month);
 
-      const delta = lastBytes ? Math.max(0, total - lastBytes) : 0;
+      const now = Date.now();
+      const timeDelta = Math.max(0.5, (now - lastTime) / 1000);
+      const bytesDelta = lastBytes ? Math.max(0, total - lastBytes) : 0;
+      const currentRate = bytesDelta / timeDelta;
       lastBytes = total;
-      if (delta > 0 && sparkline) sparkline.push(delta);
-      streamVis.updateRate(delta, null);
+      lastTime = now;
+
+      updateSpeedMeter(currentRate, 0);
+      if (sparkline && currentRate > 0) sparkline.push(currentRate);
+
+      const much = Number(fieldOf(refs.cfg, 'much', 0)) || 0;
+      if (much > 0) {
+        const pct = Math.min(100, Math.round((month / much) * 100));
+        refs.progress.style.width = `${pct}%`;
+        refs.progressText.textContent = `${pct}%（${formatBytes(month)} / ${formatBytes(much)}）`;
+      } else {
+        refs.progress.style.width = '0%';
+        refs.progressText.textContent = '未设月度上限';
+      }
     } catch (e) {
       ctx.toast.error(ctx.t('common.requestFailed'));
     }
@@ -214,35 +251,26 @@ export function render(container, context) {
 
   async function loadConfig() {
     try {
-      const res = await ctx.api('/api/get/set', { signal: ctx.signal });
+      const res = await ctx.api('/api/get/total/config', { signal: ctx.signal });
       const o = fieldOf(res, 'data', res) || {};
-      const sw = fieldOf(o, 'switch', 0);
-      enable.input.checked = Number(sw) === 1;
-      const much = Number(fieldOf(o, 'much', 0)) || 0;
-      if (much > 0) {
-        const gb = (much / 1073741824).toFixed(1);
-        limitInput.input.value = gb;
-        // 计算月度进度
-        const m = Number(fieldOf(o, 'month', 0)) || 0;
-        const ratio = Math.min(100, Math.round((m / much) * 100));
-        refs.progress.style.width = `${ratio}%`;
-        refs.progressText.textContent = `${ratio}% (已用 ${formatBytes(m)} / 上限 ${gb} GB)`;
-      }
-    } catch (e) { /* 忽略静默异常 */ }
+      refs.cfg = o;
+      enable.input.checked = Boolean(o.switch === 1 || o.enabled === true);
+      const muchBytes = Number(fieldOf(o, 'much', fieldOf(o, 'limit', 0))) || 0;
+      limitInput.input.value = muchBytes > 0 ? (muchBytes / 1073741824).toFixed(1) : '10';
+    } catch (_) {}
   }
 
-  // 实时通道订阅
+  // WebSocket 实时流速广播
   ctx.wsSubscribe('traffic', (p) => {
     const o = (p && (p.data || p)) || {};
     const rate = Number(o.rate != null ? o.rate : o.delta) || 0;
-    if (rate > 0 && sparkline) sparkline.push(rate);
-    const rx = Number(o.rx_rate || rate);
-    const tx = Number(o.tx_rate || 0);
-    streamVis.updateRate(rx, tx);
+    if (rate > 0) {
+      updateSpeedMeter(rate, 0);
+      if (sparkline) sparkline.push(rate);
+    }
   });
 
-  loadTotal();
-  loadConfig();
+  loadConfig().then(loadTotal);
   ctx.interval(loadTotal, 10000);
 }
 

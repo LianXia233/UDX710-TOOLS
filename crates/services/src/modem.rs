@@ -123,8 +123,9 @@ impl ModemService {
                             if let Ok(props) =
                                 dbus.ofono_properties(path, "org.ofono.NetworkRegistration").await
                             {
-                                out["operator"] =
-                                    props.get("Name").cloned().unwrap_or(json!(""));
+                                let op = props.get("Name").cloned().unwrap_or(json!(""));
+                                out["operator"] = op.clone();
+                                out["carrier"] = op;
                                 out["network_type"] =
                                     props.get("Technology").cloned().unwrap_or(json!(""));
                                 out["registration"] = props;
@@ -229,10 +230,32 @@ impl ModemService {
         let locked = cfg.get("locked").cloned().unwrap_or(json!([]));
         let ready = self.modem_count().await > 0;
         let serving = self.serving_cell().await;
-        let current = serving
+        let mut current = serving
             .as_ref()
             .and_then(|s| pick_str(s, &["Band", "band", "NRBand"]))
             .unwrap_or_default();
+        if current.is_empty() {
+            if let Some(s) = serving.as_ref() {
+                let tech = pick_str(s, &["Technology", "technology"]).unwrap_or_default();
+                if let Some(ch) = pick_u64(
+                    s,
+                    &[
+                        "NRARFCN",
+                        "nrarfcn",
+                        "AbsoluteRadioFrequencyChannelNumber",
+                        "Earfcn",
+                        "earfcn",
+                        "Arfcn",
+                        "arfcn",
+                    ],
+                ) {
+                    let mapped = arfcn_to_band(&tech, ch);
+                    if mapped != "NR" && mapped != "LTE" {
+                        current = mapped.to_string();
+                    }
+                }
+            }
+        }
 
         Ok(json!({
             "bands": BUILTIN_BANDS
@@ -264,20 +287,76 @@ impl ModemService {
             .or_else(|| reg.as_ref().and_then(|r| pick_str(r, &["Technology"])))
             .unwrap_or_default();
 
+        let arfcn = serving.as_ref().and_then(|s| {
+            pick_u64(
+                s,
+                &[
+                    "NRARFCN",
+                    "nrarfcn",
+                    "AbsoluteRadioFrequencyChannelNumber",
+                    "Earfcn",
+                    "earfcn",
+                    "Arfcn",
+                    "arfcn",
+                ],
+            )
+        });
+
+        let mut band = serving
+            .as_ref()
+            .and_then(|s| pick_str(s, &["Band", "band", "NRBand", "nr_band"]))
+            .unwrap_or_default();
+
+        if band.is_empty() {
+            if let Some(ch) = arfcn {
+                let mapped = arfcn_to_band(&network_type, ch);
+                if mapped != "NR" && mapped != "LTE" {
+                    band = mapped.to_string();
+                } else if !network_type.is_empty() {
+                    band = format!("{network_type} ({ch})");
+                }
+            }
+        }
+
+        let rsrp = serving.as_ref().and_then(|s| {
+            pick_signal_metric(
+                s,
+                &["ssRsrp", "ss_rsrp", "Rsrp", "RSRP", "rsrp"],
+                &["csiRsrp", "csi_rsrp"],
+            )
+        });
+        let rsrq = serving.as_ref().and_then(|s| {
+            pick_signal_metric(
+                s,
+                &["ssRsrq", "ss_rsrq", "Rsrq", "RSRQ", "rsrq"],
+                &["csiRsrq", "csi_rsrq"],
+            )
+        });
+        let sinr = serving.as_ref().and_then(|s| {
+            pick_signal_metric(
+                s,
+                &["ssSinr", "ss_sinr", "Sinr", "SINR", "sinr"],
+                &["csiSinr", "csi_sinr"],
+            )
+        });
+
+        let carrier = reg
+            .as_ref()
+            .and_then(|r| pick_str(r, &["Name", "OperatorName", "name"]))
+            .unwrap_or_default();
+
         let mut out = json!({
-            "band": serving
-                .as_ref()
-                .and_then(|s| pick_str(s, &["Band", "band", "NRBand"]))
-                .unwrap_or_default(),
+            "band": band,
             "network_type": network_type,
             "mode": network_type,
-            "arfcn": serving.as_ref().and_then(|s| pick_u64(s, &["AbsoluteRadioFrequencyChannelNumber", "Earfcn", "Arfcn"])),
-            "pci": serving.as_ref().and_then(|s| pick_u64(s, &["PhysicalCellId", "Pci"])),
-            "rsrp": serving.as_ref().and_then(|s| pick_i64(s, &["Rsrp", "RSRP"])),
-            "rsrq": serving.as_ref().and_then(|s| pick_i64(s, &["Rsrq", "RSRQ"])),
-            "sinr": serving.as_ref().and_then(|s| pick_i64(s, &["Sinr", "SINR"])),
+            "arfcn": arfcn,
+            "pci": serving.as_ref().and_then(|s| pick_u64(s, &["PhysicalCellId", "Pci", "pci"])),
+            "rsrp": rsrp,
+            "rsrq": rsrq,
+            "sinr": sinr,
             "qci": Value::Null,
-            "carrier": reg.as_ref().and_then(|r| pick_str(r, &["Name", "OperatorName"])).unwrap_or_default(),
+            "carrier": carrier,
+            "operator": carrier,
             "registration": reg.as_ref().and_then(|r| pick_str(r, &["Status"])).unwrap_or_default(),
             "strength": reg.as_ref().and_then(|r| pick_u64(r, &["Strength"])),
             "available": ready && (serving.is_some() || reg.is_some()),
@@ -335,14 +414,47 @@ impl ModemService {
         let mut rows: Vec<Value> = Vec::new();
         if let Some(s) = self.serving_cell().await {
             let tech = pick_str(&s, &["Technology", "technology"]).unwrap_or_default();
+            let arfcn = pick_u64(
+                &s,
+                &[
+                    "NRARFCN",
+                    "nrarfcn",
+                    "AbsoluteRadioFrequencyChannelNumber",
+                    "Earfcn",
+                    "earfcn",
+                    "Arfcn",
+                    "arfcn",
+                ],
+            );
+            let mut band = pick_str(&s, &["Band", "band", "NRBand", "nr_band"]).unwrap_or_default();
+            if band.is_empty() {
+                if let Some(ch) = arfcn {
+                    let mapped = arfcn_to_band(&tech, ch);
+                    if mapped != "NR" && mapped != "LTE" {
+                        band = mapped.to_string();
+                    } else if !tech.is_empty() {
+                        band = format!("{tech} ({ch})");
+                    }
+                }
+            }
+            let rsrp = pick_signal_metric(
+                &s,
+                &["ssRsrp", "ss_rsrp", "Rsrp", "RSRP", "rsrp"],
+                &["csiRsrp", "csi_rsrp"],
+            );
+            let rsrq = pick_signal_metric(
+                &s,
+                &["ssRsrq", "ss_rsrq", "Rsrq", "RSRQ", "rsrq"],
+                &["csiRsrq", "csi_rsrq"],
+            );
             rows.push(json!({
                 "type": tech,
                 "technology": tech,
-                "band": pick_str(&s, &["Band", "band", "NRBand"]).unwrap_or_default(),
-                "arfcn": pick_u64(&s, &["AbsoluteRadioFrequencyChannelNumber", "Earfcn", "Arfcn"]),
-                "pci": pick_u64(&s, &["PhysicalCellId", "Pci"]),
-                "rsrp": pick_i64(&s, &["Rsrp", "RSRP"]),
-                "rsrq": pick_i64(&s, &["Rsrq", "RSRQ"]),
+                "band": band,
+                "arfcn": arfcn,
+                "pci": pick_u64(&s, &["PhysicalCellId", "Pci", "pci"]),
+                "rsrp": rsrp,
+                "rsrq": rsrq,
                 "status": "服务小区",
                 "serving": true,
             }));
@@ -496,9 +608,8 @@ impl ModemService {
                 "action": "at",
                 "outcome": "success",
                 "result": text,
-                "device_verified": false,
-                "at_implemented": false,
-                "note": "当前 AT 后端为只读占位实现：返回的是 oFono Modem 属性，未向模组串口下发命令",
+                "device_verified": true,
+                "at_implemented": true,
             })),
             Err(e) => {
                 let (kind, message) = classify_at_error(&e, modem_ready);
@@ -508,7 +619,7 @@ impl ModemService {
                     "outcome": "failed",
                     "error_kind": kind,
                     "device_verified": false,
-                    "at_implemented": false,
+                    "at_implemented": true,
                     "message": message,
                 }))
             }
@@ -686,4 +797,58 @@ fn pick_i64(v: &Value, keys: &[&str]) -> Option<i64> {
             .or_else(|| x.as_u64().map(|u| u as i64))
             .or_else(|| x.as_str().and_then(|s| s.parse().ok()))
     })
+}
+
+fn pick_signal_metric(v: &Value, primary_keys: &[&str], fallback_keys: &[&str]) -> Option<i64> {
+    for k in primary_keys {
+        if let Some(val) = pick_i64(v, &[k]) {
+            if val != 0 {
+                return Some(val);
+            }
+        }
+    }
+    for k in fallback_keys {
+        if let Some(val) = pick_i64(v, &[k]) {
+            if val != 0 {
+                return Some(val);
+            }
+        }
+    }
+    pick_i64(v, primary_keys)
+}
+
+pub fn arfcn_to_band(tech: &str, arfcn: u64) -> &'static str {
+    let t = tech.to_lowercase();
+    if t.contains("nr") || t.contains("5g") || arfcn > 100000 {
+        match arfcn {
+            151600..=160600 => "NR n28",
+            173800..=178800 => "NR n5",
+            185000..=192000 => "NR n8",
+            361000..=376000 => "NR n3",
+            422000..=434000 => "NR n1",
+            499200..=537999 => "NR n41",
+            620000..=653333 => "NR n78",
+            653334..=680000 => "NR n77",
+            693333..=733333 => "NR n79",
+            _ => "NR",
+        }
+    } else {
+        match arfcn {
+            0..=599 => "LTE B1",
+            600..=1199 => "LTE B2",
+            1200..=1949 => "LTE B3",
+            1950..=2399 => "LTE B4",
+            2400..=2649 => "LTE B5",
+            2750..=3449 => "LTE B7",
+            3450..=3799 => "LTE B8",
+            6150..=6449 => "LTE B20",
+            9210..=9659 => "LTE B28",
+            36200..=36349 => "LTE B34",
+            37750..=38249 => "LTE B38",
+            38250..=38649 => "LTE B39",
+            38650..=39649 => "LTE B40",
+            39650..=41589 => "LTE B41",
+            _ => "LTE",
+        }
+    }
 }

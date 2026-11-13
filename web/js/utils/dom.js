@@ -177,55 +177,17 @@ export function card({ title = '', subtitle = '', span = 12, icon: iconName = nu
 }
 
 /**
- * 可折叠卡片组件 (Collapsible Card / Accordion)，用于隐藏折叠冗长参数与技术详情
- * 默认折叠，点击标题栏优雅平滑展开
+ * 卡片组件包装（原可折叠 Accordion）。
+ * 根据用户明确要求：“不要折叠文案了”，全部平铺直接呈现，避免折叠隐藏关键参数。
  */
-export function collapsibleCard({
-  title = '',
-  subtitle = '',
-  span = 12,
-  icon: iconName = null,
-  open = false,
-  badge = '展开详情',
-  className = ''
-} = {}) {
-  const details = el('details', {
-    class: `card card--collapsible col-span-${span} ${className}`.trim()
-  });
-  if (open) details.setAttribute('open', '');
-
-  const summary = el('summary', { class: 'card__head card__head--summary' });
-  const headKids = [];
-  if (iconName) headKids.push(el('span', { class: 'card__icon' }, icon(iconName)));
-
-  const textWrap = el('div', { class: 'card__titles' });
-  if (title) textWrap.appendChild(el('h3', { class: 'card__title', text: title }));
-  const cleanSub = sanitizeSubtitle(subtitle);
-  if (cleanSub) textWrap.appendChild(el('p', { class: 'card__subtitle', text: cleanSub }));
-  headKids.push(textWrap);
-
-  const actionsWrap = el('div', { class: 'card__actions' });
-  if (badge) actionsWrap.appendChild(el('span', { class: 'badge badge--muted', text: badge }));
-  actionsWrap.appendChild(icon('chevron-down', 'card__chevron'));
-  headKids.push(actionsWrap);
-
-  summary.append(...headKids);
-  const body = el('div', { class: 'card__body card__body--collapse' });
-  details.append(summary, body);
-
+export function collapsibleCard(opts = {}) {
+  const { title = '', subtitle = '', span = 12, icon = null, className = '' } = opts;
+  const c = card({ title, subtitle, span, icon, className });
   return {
-    el: details,
-    body,
-    head: summary,
-    toggle(force) {
-      if (typeof force === 'boolean') {
-        if (force) details.setAttribute('open', '');
-        else details.removeAttribute('open');
-      } else {
-        if (details.hasAttribute('open')) details.removeAttribute('open');
-        else details.setAttribute('open', '');
-      }
-    }
+    el: c.el,
+    body: c.body,
+    head: c.head,
+    toggle() {}
   };
 }
 

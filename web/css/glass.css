@@ -34,22 +34,23 @@
 /* ============ 卡片（Card）玻璃美化与微动效 ============ */
 .card {
   border-radius: var(--radius-card);
-  transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1),
-              box-shadow 0.28s cubic-bezier(0.2, 0.8, 0.2, 1),
-              border-color 0.28s ease,
-              background-color 0.28s ease;
+  border: 1px solid var(--border);
+  box-shadow: var(--glass-shadow);
+  transition: transform 0.22s cubic-bezier(0.22, 0.8, 0.25, 1),
+              box-shadow 0.22s cubic-bezier(0.22, 0.8, 0.25, 1),
+              border-color 0.22s ease;
   overflow: hidden;
 }
 
 .card:hover {
   transform: translateY(-2px);
   background: var(--surface-card);
-  border-color: rgba(255, 255, 255, 0.96);
+  border-color: var(--ba-cyan);
   box-shadow: var(--glass-shadow-hover);
 }
 
 :root[data-theme="dark"] .card:hover {
-  border-color: rgba(255, 255, 255, 0.24);
+  border-color: rgba(25, 182, 237, 0.4);
 }
 
 /* 卡片标题栏微高光 */
@@ -57,14 +58,14 @@
   position: relative;
 }
 
-/* 卡片图标容器（圆形/圆角半透明玻璃微标） */
+/* 卡片图标容器（Schale 科技切角玻璃微标） */
 .card__icon {
-  width: 40px;
-  height: 40px;
+  width: 32px;
+  height: 32px;
   border-radius: var(--radius-sm);
-  background: linear-gradient(135deg, rgba(37, 99, 235, 0.16), rgba(6, 182, 212, 0.12));
-  border: 1px solid rgba(255, 255, 255, 0.75);
-  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.9), 0 4px 10px rgba(37, 99, 235, 0.08);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  box-shadow: 2px 2px 0 rgba(25, 182, 237, 0.18);
   color: var(--primary);
   display: flex;
   align-items: center;
@@ -73,9 +74,30 @@
   transition: transform 0.22s ease, background 0.22s ease;
 }
 
+.card__icon .icon {
+  width: 16px;
+  height: 16px;
+}
+
 .card:hover .card__icon {
   transform: scale(1.05);
-  background: linear-gradient(135deg, rgba(37, 99, 235, 0.22), rgba(6, 182, 212, 0.18));
+  background: var(--surface-hover);
+  border-color: var(--ba-cyan);
+}
+
+/* Schale 浮动微标标签 */
+.schale-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #ffffff;
+  background: var(--primary);
+  padding: 3px 12px;
+  border-radius: 5px 2px 5px 2px;
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  box-shadow: 2.5px 2.5px 0 var(--ba-cyan);
 }
 
 /* ============ 顶部栏与导航毛玻璃 ============ */
@@ -286,28 +308,385 @@
   100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
 }
 
-/* ============ 动态 SVG 容器与仪表盘组件样式 ============ */
-.hero-radar-wrap {
+/* ============ 5G 蜂窝全景工作台 (Cellular Panorama Hero) ============ */
+.panorama-card {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.82) 0%, rgba(240, 246, 255, 0.72) 100%);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  padding: 16px 18px;
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-card);
+  margin-bottom: var(--space-4);
+}
+
+[data-theme="dark"] .panorama-card {
+  background: linear-gradient(135deg, rgba(20, 35, 58, 0.78) 0%, rgba(13, 23, 40, 0.72) 100%);
+}
+
+.panorama-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; height: 3px;
+  background: linear-gradient(90deg, #2563eb, #06b6d4, #10b981);
+}
+
+.panorama-hero {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 18px;
+  align-items: center;
+}
+
+@media (max-width: 820px) {
+  .panorama-hero {
+    grid-template-columns: 1fr;
+  }
+}
+
+.panorama-dial-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 14px 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid var(--glass-border-subtle);
+  text-align: center;
+}
+
+[data-theme="dark"] .panorama-dial-wrap {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.panorama-carrier-tag {
+  margin-top: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+
+.panorama-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 4px;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(16, 185, 129, 0.12);
+  color: #059669;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.panorama-matrix {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
+}
+
+.panorama-tile {
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.52);
+  border: 1px solid var(--glass-border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  transition: all 0.2s ease;
+}
+
+.panorama-tile:hover {
+  background: rgba(255, 255, 255, 0.85);
+  transform: translateY(-1px);
+}
+
+[data-theme="dark"] .panorama-tile {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+[data-theme="dark"] .panorama-tile:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.panorama-tile__label {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.panorama-tile__val {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text);
+  font-family: var(--mono);
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.panorama-tile__unit {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.panorama-tile__badge {
+  font-size: 9.5px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+  margin-left: auto;
+}
+
+/* ============ 系统遥测网格 (System Telemetry Grid) ============ */
+.telemetry-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.telemetry-tile {
+  padding: 12px 14px;
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.telemetry-tile:hover {
+  background: var(--surface-card);
+  transform: translateY(-2px);
+  box-shadow: var(--glass-shadow-hover);
+}
+
+.telemetry-tile__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.telemetry-tile__title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.telemetry-tile__icon {
+  width: 16px;
+  height: 16px;
+  color: var(--primary);
+}
+
+.telemetry-tile__num {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text);
+  font-family: var(--mono);
+  line-height: 1.1;
+}
+
+.telemetry-tile__sub {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.telemetry-bar {
+  width: 100%;
+  height: 5px;
+  border-radius: 9999px;
+  background: rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+  margin-top: 2px;
+}
+
+[data-theme="dark"] .telemetry-bar {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.telemetry-bar__fill {
+  height: 100%;
+  border-radius: 9999px;
+  transition: width 0.4s ease;
+}
+
+/* ============ 调制解调器射频状态药丸 (RF Stat Pills) ============ */
+.rf-stats-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.rf-stat-pill {
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.65), rgba(245, 249, 255, 0.5));
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 2px 6px rgba(20, 50, 95, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+[data-theme="dark"] .rf-stat-pill {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.rf-stat-pill__label {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.rf-stat-pill__val {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text);
+  font-family: var(--mono);
+}
+
+.rf-stat-pill__tag {
+  align-self: flex-start;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+  margin-top: 2px;
+}
+
+/* ============ 吞吐速率仪表卡 (Speedometer Cards) ============ */
+.throughput-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-bottom: var(--space-4);
+}
+
+@media (max-width: 680px) {
+  .throughput-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.speed-card {
+  padding: 16px 18px;
+  border-radius: var(--radius-card);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: relative;
+  overflow: hidden;
+}
+
+.speed-card--down {
+  background: linear-gradient(135deg, rgba(239, 246, 255, 0.8), rgba(255, 255, 255, 0.65));
+}
+
+.speed-card--down .speed-card__rate {
+  color: #2563eb;
+}
+
+.speed-card--up {
+  background: linear-gradient(135deg, rgba(236, 253, 245, 0.8), rgba(255, 255, 255, 0.65));
+}
+
+.speed-card--up .speed-card__rate {
+  color: #059669;
+}
+
+[data-theme="dark"] .speed-card--down {
+  background: linear-gradient(135deg, rgba(30, 58, 138, 0.25), rgba(15, 23, 42, 0.6));
+}
+
+[data-theme="dark"] .speed-card--up {
+  background: linear-gradient(135deg, rgba(6, 78, 59, 0.25), rgba(15, 23, 42, 0.6));
+}
+
+.speed-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.speed-card__label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.speed-card__rate-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.speed-card__rate {
+  font-size: 32px;
+  font-weight: 900;
+  font-family: var(--mono);
+  line-height: 1;
+}
+
+.speed-card__unit {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.speed-card__totals {
+  display: flex;
+  gap: 16px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.speed-card__total-item strong {
+  color: var(--text);
+  font-family: var(--mono);
+  font-weight: 700;
+}
+
+/* ============ 5G 射频全息拓扑链路视窗 ============ */
+.cellular-hologram-wrap {
   position: relative;
   width: 100%;
   border-radius: var(--radius-card);
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.55), rgba(240, 246, 255, 0.4));
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.76) 0%, rgba(238, 246, 255, 0.6) 100%);
   border: 1px solid var(--glass-border);
   box-shadow: var(--glass-shadow);
   overflow: hidden;
   margin-bottom: var(--space-4);
+  padding: 8px 12px;
 }
 
-.hero-radar-svg {
+[data-theme="dark"] .cellular-hologram-wrap {
+  background: linear-gradient(135deg, rgba(17, 24, 39, 0.8) 0%, rgba(15, 23, 42, 0.72) 100%);
+}
+
+.cellular-hologram-svg {
   display: block;
   width: 100%;
   height: auto;
-  max-height: 220px;
+  max-height: 160px;
 }
 
-.hero-radar-overlay {
+.holo-hud {
   position: absolute;
-  top: 12px;
   left: 14px;
   right: 14px;
   display: flex;
@@ -318,39 +697,143 @@
   gap: 8px;
 }
 
-.hero-radar-badge {
+.holo-hud--top {
+  top: 10px;
+}
+
+.holo-hud--bottom {
+  bottom: 8px;
+  justify-content: center;
+  gap: 10px;
+}
+
+.holo-badge {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   padding: 4px 12px;
-  border-radius: var(--radius-pill);
-  background: rgba(255, 255, 255, 0.85);
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
-  border: 1px solid var(--glass-border);
-  box-shadow: 0 2px 8px rgba(20, 50, 95, 0.06);
-  font-size: 12px;
+  border-radius: 6px 2px 6px 2px;
+  background: var(--surface-card);
+  border: 1px solid var(--border);
+  box-shadow: 2px 2px 0 var(--ba-cyan);
+  font-size: 11.5px;
   font-weight: 700;
   color: var(--primary);
 }
 
-.hero-radar-right {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+[data-theme="dark"] .holo-badge {
+  background: rgba(30, 41, 59, 0.85);
+  border-color: rgba(25, 182, 237, 0.4);
 }
 
-.hero-radar-stat {
+.holo-badge--sa {
+  color: #059669;
+  border-color: rgba(5, 150, 105, 0.3);
+  box-shadow: 2px 2px 0 rgba(5, 150, 105, 0.25);
+}
+
+.holo-stat-pill {
   padding: 3px 10px;
-  border-radius: var(--radius-pill);
-  background: rgba(255, 255, 255, 0.75);
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
-  border: 1px solid var(--glass-border);
+  border-radius: 5px 2px 5px 2px;
+  background: var(--surface-card);
+  border: 1px solid var(--border);
   font-size: 11px;
   font-family: var(--mono);
+  font-weight: 700;
+  color: var(--text);
+  box-shadow: 2px 2px 0 rgba(24, 54, 83, 0.06);
+}
+
+[data-theme="dark"] .holo-stat-pill {
+  background: rgba(30, 41, 59, 0.75);
+}
+
+/* ============ 射频指标线性量程条卡片 (RF Range Bar Card) ============ */
+.rf-bars-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: var(--space-4);
+}
+
+.rf-bar-card {
+  padding: 12px 14px;
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.rf-bar-card:hover {
+  background: var(--surface-card);
+  transform: translateY(-2px);
+  box-shadow: var(--glass-shadow-hover);
+}
+
+.rf-bar__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.rf-bar__label {
+  font-size: 11.5px;
   font-weight: 600;
   color: var(--text-muted);
+}
+
+.rf-bar__tag {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.rf-bar__val-row {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.rf-bar__val {
+  font-size: 22px;
+  font-weight: 900;
+  font-family: var(--mono);
+  color: var(--text);
+  line-height: 1.1;
+}
+
+.rf-bar__unit {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.rf-bar__track {
+  position: relative;
+  width: 100%;
+  height: 6px;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, #dc2626 0%, #f59e0b 35%, #059669 70%, #06b6d4 100%);
+  margin-top: 2px;
+  overflow: visible;
+}
+
+.rf-bar__cursor {
+  position: absolute;
+  top: -3px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 2.5px solid var(--primary);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  transform: translateX(-50%);
+  transition: left 0.4s ease;
 }
 
 /* 环形仪表盘网格与单项 */
@@ -366,7 +849,7 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 12px 8px;
+  padding: 8px 6px;
   border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, 0.45);
   border: 1px solid var(--glass-border-subtle);
@@ -384,8 +867,8 @@
 }
 
 .svg-gauge__label {
-  margin-top: 6px;
-  font-size: 12px;
+  margin-top: 4px;
+  font-size: 11.5px;
   font-weight: 600;
   color: var(--text-muted);
   text-align: center;

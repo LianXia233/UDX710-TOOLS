@@ -27,11 +27,11 @@
   gap: var(--space-3);
   padding: 8px 18px;
   background: var(--topbar-bg);
-  -webkit-backdrop-filter: blur(28px) saturate(180%);
-  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: blur(24px) saturate(180%);
   border: 1px solid var(--glass-border);
-  box-shadow: var(--glass-shadow-lg);
-  border-radius: var(--radius-xl);
+  box-shadow: 0 4px 18px rgba(24, 54, 83, 0.06), 3px 3px 0 rgba(25, 182, 237, 0.15);
+  border-radius: 12px 3px 12px 3px;
   max-width: 1600px;
   margin: 0 auto;
   position: relative;
@@ -49,18 +49,26 @@
 }
 
 .dock-brand__logo {
-  width: 38px;
+  width: 36px;
   height: 38px;
   flex-shrink: 0;
-  border-radius: 12px;
+  border-radius: 9px 2px 9px 2px;
+  background: var(--ba-cyan);
+  transform: skewX(-8deg);
+  box-shadow: 3px 2px 0 #9be4fa;
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: transform 0.2s ease;
+}
+
+.dock-brand:hover .dock-brand__logo {
+  transform: skewX(-8deg) scale(1.05);
 }
 
 .dock-brand__logo .brand__live {
-  width: 38px;
-  height: 38px;
+  width: 32px;
+  height: 32px;
   display: block;
 }
 
@@ -90,10 +98,11 @@
   font-size: 9.5px;
   font-weight: 800;
   padding: 1px 5px;
-  border-radius: 6px;
-  background: linear-gradient(135deg, #2563eb, #0891b2);
+  border-radius: 4px 2px 4px 2px;
+  background: var(--primary);
   color: #ffffff;
   letter-spacing: 0.04em;
+  box-shadow: 2px 2px 0 var(--ba-cyan);
 }
 
 .dock-brand__text p {
@@ -104,18 +113,18 @@
   line-height: 1.1;
 }
 
-/* 桌面端水平主导航药丸栏 (Horizontal Nav Dock) */
+/* 桌面端水平主导航药丸栏 (Horizontal Nav Dock - PaperGrid / Schale) */
 .dock-nav {
   display: flex;
   align-items: center;
   gap: 4px;
-  background: rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.72);
   -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
-  border: 1px solid var(--glass-border-subtle);
-  border-radius: 9999px;
+  border: 1px solid var(--border);
+  border-radius: 8px 2px 8px 2px;
   padding: 4px;
-  box-shadow: var(--glass-shadow-inset);
+  box-shadow: 2px 2px 0 rgba(24, 54, 83, 0.05);
   max-width: 100%;
 }
 
@@ -128,14 +137,14 @@
   align-items: center;
   gap: 6px;
   padding: 6px 13px;
-  border-radius: 9999px;
+  border-radius: 6px 2px 6px 2px;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 650;
   color: var(--text-muted);
   border: 1px solid transparent;
   background: transparent;
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: all 0.18s cubic-bezier(0.22, 0.8, 0.25, 1);
   white-space: nowrap;
   user-select: none;
 }
@@ -148,8 +157,9 @@
 }
 
 .dock-nav-item:hover {
-  color: var(--text);
-  background: rgba(255, 255, 255, 0.7);
+  color: var(--primary);
+  background: var(--surface-2);
+  border-color: var(--border);
   transform: translateY(-1px);
 }
 
@@ -160,8 +170,14 @@
 .dock-nav-item.is-active {
   color: #ffffff;
   background: var(--primary);
-  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35);
-  border-color: rgba(255, 255, 255, 0.25);
+  box-shadow: 2px 2px 0 var(--ba-cyan);
+  border-color: var(--primary);
+  transform: skewX(-4deg);
+}
+
+.dock-nav-item.is-active .icon,
+.dock-nav-item.is-active span {
+  transform: skewX(4deg);
 }
 
 .dock-nav-item.is-active .icon {
@@ -171,11 +187,11 @@
 /* 更多应用高亮徽标药丸 */
 .dock-nav-item--apps {
   color: var(--primary);
-  background: rgba(37, 99, 235, 0.08);
+  background: rgba(8, 124, 186, 0.08);
 }
 
 .dock-nav-item--apps:hover {
-  background: rgba(37, 99, 235, 0.16);
+  background: rgba(8, 124, 186, 0.16);
 }
 
 /* 右侧控制区 */

@@ -9,64 +9,65 @@
 :root {
   color-scheme: light dark;
 
-  /* ============ 白色毛玻璃调色板（默认浅色） ============ */
-  --bg: #f0f5fc;
-  --bg-gradient: radial-gradient(circle at 12% 10%, rgba(99, 160, 255, 0.22), transparent 42%),
-                 radial-gradient(circle at 88% 85%, rgba(56, 205, 190, 0.18), transparent 48%),
-                 radial-gradient(circle at 50% 50%, rgba(199, 210, 254, 0.15), transparent 60%),
-                 linear-gradient(145deg, #f8faff 0%, #e8f1fc 50%, #edf4fe 100%);
+  /* ============ PaperGrid / Schale 蔚蓝科技调色板（纯净蓝白） ============ */
+  --bg: #f2f7fb;
+  --bg-gradient: radial-gradient(circle at 10% 8%, rgba(25, 182, 237, 0.16), transparent 38%),
+                 radial-gradient(circle at 90% 88%, rgba(8, 124, 186, 0.12), transparent 45%),
+                 linear-gradient(145deg, #f8fbfe 0%, #edf4fa 50%, #f0f6fc 100%);
 
-  --surface: rgba(255, 255, 255, 0.72);
-  --surface-card: rgba(255, 255, 255, 0.78);
-  --surface-muted: rgba(255, 255, 255, 0.46);
-  --surface-2: rgba(255, 255, 255, 0.58);
-  --surface-hover: rgba(255, 255, 255, 0.88);
-  --surface-elevated: rgba(255, 255, 255, 0.85);
+  --surface: rgba(255, 255, 255, 0.88);
+  --surface-card: #ffffff;
+  --surface-muted: rgba(237, 243, 248, 0.75);
+  --surface-2: rgba(233, 245, 252, 0.65);
+  --surface-hover: #ffffff;
+  --surface-elevated: #ffffff;
 
-  --text: #0f1c34;
-  --text-muted: #536482;
-  --text-subtle: #7a8ba8;
+  --ba-cyan: #19b6ed;
+  --ba-ink: #183653;
+  --text: #17324b;
+  --text-muted: #557088;
+  --text-subtle: #7e95a7;
 
-  --border: rgba(255, 255, 255, 0.75);
-  --glass-border: rgba(255, 255, 255, 0.88);
-  --glass-border-subtle: rgba(255, 255, 255, 0.55);
-  --glass-blur: 26px;
-  --glass-blur-sm: 14px;
-  --glass-blur-lg: 32px;
+  --border: #dce8f1;
+  --glass-border: #d8e5ef;
+  --glass-border-subtle: #e7eff6;
+  --glass-blur: 20px;
+  --glass-blur-sm: 10px;
+  --glass-blur-lg: 28px;
 
-  --glass-shadow: 0 12px 34px -4px rgba(20, 50, 95, 0.07),
-                  0 4px 12px -2px rgba(20, 50, 95, 0.03),
-                  inset 0 1px 1px 0 rgba(255, 255, 255, 0.95);
-  --glass-shadow-hover: 0 20px 46px -6px rgba(20, 50, 95, 0.12),
-                        0 8px 18px -4px rgba(20, 50, 95, 0.06),
+  --glass-shadow: 0 4px 20px -2px rgba(24, 54, 83, 0.06),
+                  3px 3px 0 rgba(25, 182, 237, 0.1),
+                  inset 0 1px 1px 0 #ffffff;
+  --glass-shadow-hover: 0 10px 28px -4px rgba(24, 54, 83, 0.1),
+                        4px 4px 0 rgba(25, 182, 237, 0.18),
                         inset 0 1px 1px 0 #ffffff;
-  --glass-shadow-modal: 0 26px 70px -10px rgba(15, 35, 75, 0.22),
-                        0 12px 28px -6px rgba(15, 35, 75, 0.12),
-                        inset 0 1px 1.5px 0 rgba(255, 255, 255, 0.95);
+  --glass-shadow-modal: 0 20px 50px -8px rgba(24, 54, 83, 0.2),
+                        6px 6px 0 rgba(25, 182, 237, 0.22),
+                        inset 0 1px 1.5px 0 #ffffff;
 
-  /* 主题色系：科技蔚蓝 + 薄荷青 + 状态色 */
-  --primary: #2563eb;
-  --primary-hover: #1d4ed8;
-  --primary-glow: rgba(37, 99, 235, 0.28);
-  --primary-gradient: linear-gradient(135deg, #2563eb 0%, #0ea5e9 100%);
+  /* 主题色系：Schale 蔚蓝 + 电光青 + 状态色 */
+  --primary: #087cba;
+  --primary-hover: #076ca2;
+  --primary-glow: rgba(25, 182, 237, 0.28);
+  --primary-gradient: linear-gradient(135deg, #087cba 0%, #19b6ed 100%);
   --primary-contrast: #ffffff;
 
   --ok: #059669;
-  --ok-glow: rgba(16, 185, 129, 0.25);
+  --ok-glow: rgba(5, 150, 105, 0.2);
   --warning: #d97706;
-  --warning-glow: rgba(245, 158, 11, 0.25);
-  --danger: #dc2626;
-  --danger-glow: rgba(239, 68, 68, 0.25);
+  --warning-glow: rgba(217, 119, 6, 0.2);
+  --danger: #c83d55;
+  --danger-glow: rgba(200, 61, 85, 0.2);
   --danger-contrast: #ffffff;
-  --info: #0891b2;
+  --info: #087cba;
 
-  --sidebar-bg: rgba(255, 255, 255, 0.65);
-  --topbar-bg: rgba(255, 255, 255, 0.72);
-  --bottomnav-bg: rgba(255, 255, 255, 0.82);
+  --sidebar-bg: rgba(255, 255, 255, 0.85);
+  --topbar-bg: rgba(255, 255, 255, 0.92);
+  --bottomnav-bg: rgba(255, 255, 255, 0.95);
 
-  --radius-card: 22px;
-  --radius-sm: 12px;
-  --radius-lg: 28px;
+  --radius-card: 14px 4px 14px 4px;
+  --radius-sm: 8px 2px 8px 2px;
+  --radius-lg: 20px 4px 20px 4px;
   --radius-pill: 9999px;
 
   --space-1: 4px;
