@@ -10,6 +10,7 @@ import { fieldOf, safeText, asArray, formatBytes } from '../utils/format.js';
 let ctx = null;
 let bandBox = null;
 let cellTable = null;
+let cellHint = null;
 let netifTable = null;
 
 function post(path, body) {
@@ -53,8 +54,9 @@ function buildBasic(grid) {
     label: '网络模式', name: 'netmode', options: [
       { value: 'auto', label: '5G/LTE Auto' },
       { value: 'nr5g', label: 'NR 5G Only' },
-      { value: 'lte', label: 'LTE Only' },
-      { value: 'nsa', label: 'NSA Only' }
+      { value: 'nsa', label: 'NSA Only' },
+      { value: 'sa', label: 'SA Only' },
+      { value: 'lte', label: 'LTE Only' }
     ]
   });
   const setMode = button(ctx.t('common.apply'), {
@@ -64,23 +66,11 @@ function buildBasic(grid) {
       catch (e) { ctx.toast.error(ctx.t('common.requestFailed')); }
     }
   });
+  // 卡槽：本机以单卡模式运行（oFono NUM_SIM_SLOTS=1），固定卡槽 1，
+  // 不提供切换入口，避免误切导致 Modem 掉线。
   const slotRow = el('div', { class: 'row' },
-    button('切换到卡槽 1', {
-      variant: 'outline', onClick: async () => {
-        const ok = await ctx.confirm({ message: '切换到 SIM 卡槽 1？', danger: true });
-        if (!ok) return;
-        try { await post('/api/switch', { slot: 1 }); ctx.toast.success(ctx.t('common.saved')); }
-        catch (e) { ctx.toast.error(ctx.t('common.requestFailed')); }
-      }
-    }),
-    button('切换到卡槽 2', {
-      variant: 'outline', onClick: async () => {
-        const ok = await ctx.confirm({ message: '切换到 SIM 卡槽 2？', danger: true });
-        if (!ok) return;
-        try { await post('/api/switch', { slot: 2 }); ctx.toast.success(ctx.t('common.saved')); }
-        catch (e) { ctx.toast.error(ctx.t('common.requestFailed')); }
-      }
-    }));
+    el('span', { class: 'badge badge--muted', text: '卡槽 1' }),
+    el('span', { class: 'muted', text: '本机为单卡配置，不支持切换卡槽' }));
 
   cardEl.body.append(
     data.wrap, roaming.wrap, airplane.wrap,
@@ -89,15 +79,20 @@ function buildBasic(grid) {
   );
   grid.appendChild(cardEl.el);
 
-  // 载入初始状态
+  // 载入初始状态（四项全部回显，此前模式与飞行模式只有 POST 没有 GET）
   (async () => {
     try {
-      const [d, r] = await Promise.all([
+      const [d, r, nm, ap] = await Promise.all([
         ctx.api('/api/data', { signal: ctx.signal }).catch(() => null),
-        ctx.api('/api/roaming', { signal: ctx.signal }).catch(() => null)
+        ctx.api('/api/roaming', { signal: ctx.signal }).catch(() => null),
+        ctx.api('/api/get/network_mode', { signal: ctx.signal }).catch(() => null),
+        ctx.api('/api/airplane_mode', { signal: ctx.signal }).catch(() => null)
       ]);
       data.input.checked = !!(fieldOf(d, 'active', fieldOf(d, 'data', d)));
       roaming.input.checked = !!(fieldOf(r, 'allowed', fieldOf(r, 'data', r)));
+      const curMode = fieldOf(nm, 'mode', '');
+      if (curMode) modeSel.input.value = curMode;
+      airplane.input.checked = !!fieldOf(ap, 'enabled', false);
     } catch (e) { /* 忽略 */ }
   })();
 }
@@ -122,7 +117,15 @@ async function loadBands() {
       checks.push(sw.input);
       bandBox.appendChild(sw.wrap);
     }
-    if (!list.length) bandBox.appendChild(el('p', { class: 'muted', text: '暂无频段数据' }));
+    if (!list.length) {
+      bandBox.appendChild(el('p', { class: 'muted', text: fieldOf(bands, 'reason', '') || '暂无频段数据' }));
+    } else if (fieldOf(bands, 'available', true) === false) {
+      // 后端标注 available=false 时说明清单是内置候选而非设备上报，
+      // 明确告知用户，避免误以为读到了模组真实能力。
+      bandBox.insertBefore(
+        el('p', { class: 'field__hint', text: fieldOf(bands, 'reason', '') || '以下为内置候选频段，设备未上报实际支持列表' }),
+        bandBox.firstChild);
+    }
 
     bandBox.appendChild(el('div', { class: 'toolbar', style: { marginTop: '12px' } },
       el('span', { class: 'muted', text: `当前频段：${safeText(fieldOf(cur, 'band', '—'))}` }),
@@ -161,7 +164,11 @@ async function loadBands() {
 async function loadCells() {
   try {
     const res = await ctx.api('/api/cells', { signal: ctx.signal });
-    cellTable.setRows(asArray(res, ['cells', 'neighbors']));
+    const rows = asArray(res, ['cells', 'neighbors']);
+    cellTable.setRows(rows);
+    if (cellHint) {
+      cellHint.textContent = rows.length ? '' : (fieldOf(res, 'reason', '') || '');
+    }
   } catch (e) { ctx.toast.error(ctx.t('common.requestFailed')); }
 }
 
@@ -209,6 +216,8 @@ function buildAdvanced(grid) {
     ], rows: [], emptyText: '暂无小区数据'
   });
   cellCard.body.appendChild(cellTable.el);
+  cellHint = el('p', { class: 'field__hint', text: '' });
+  cellCard.body.insertBefore(cellHint, cellTable.el);
   grid.appendChild(cellCard.el);
 
   loadBands();
@@ -232,11 +241,11 @@ function buildNetif(grid) {
       { label: '接口', render: (r) => safeText(r.name || r.interface) },
       { label: 'MAC', render: (r) => safeText(r.mac) },
       { label: 'IPv4', render: (r) => safeText(r.ipv4 || r.ip) },
-      { label: '状态', render: (r) => ctx.statusBadge(r.up ? ctx.t('status.up') : ctx.t('status.down'), r.up ? 'ok' : 'muted') },
-      {
+      { label: '状态', render: (r) => ctx.statusBadge(r.up ? ctx.t('status.up') : ctx.t('status.down'), r.up ? 'ok' : 'muted') },      {
         label: ctx.t('common.actions'), align: 'right', render: (r) => {
           const name = r.name || r.interface;
-          const monitor = switchField({ label: '监听', checked: !!(r.monitor || r.monitoring) });
+          // 后端字段是 monitored，此前读 monitor/monitoring 导致开关恒为关闭。
+          const monitor = switchField({ label: '监听', checked: !!(r.monitored || r.monitor || r.monitoring) });
           monitor.input.addEventListener('change', async () => {
             try {
               await post('/api/netif/monitor', { interface: name, enabled: monitor.input.checked });

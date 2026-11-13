@@ -130,13 +130,31 @@ export function render(container, context) {
   batteryCard.body.append(statWrap);
   for (const key of Object.keys(batteryRows)) batteryCard.body.appendChild(batteryRows[key].el);
 
-  // 状态卡
+  // 状态卡：状态灯由 /api/health 与 WS 推送驱动，不再写死「已连接」。
   const statusCard = card({ title: '运行状态', span: 6, icon: 'activity' });
-  const connRow = el('div', { class: 'row' },
-    ctx.statusLight(true, ctx.t('status.connected')),
-    el('span', { class: 'muted', text: '实时推送 /api/ws，断线自动降级为 HTTP 轮询' }));
-  statusCard.body.append(connRow,
-    el('p', { class: 'muted', style: { marginTop: '8px' }, text: `采样窗口：最近 ${MAX_POINTS} 个点` }));
+  const connLight = ctx.statusLight(false, '检测中…');
+  const modemLine = el('span', { class: 'kv__v', text: '—' });
+  statusCard.body.append(
+    el('div', { class: 'row' }, connLight),
+    el('div', { class: 'kv' }, el('span', { class: 'kv__k', text: '模组' }), modemLine),
+    el('p', { class: 'muted', style: { marginTop: '8px' }, text: '实时推送 /api/ws，断线自动降级为 HTTP 轮询' }),
+    el('p', { class: 'muted', style: { marginTop: '4px' }, text: `采样窗口：最近 ${MAX_POINTS} 个点` }));
+
+  /** 依据健康摘要刷新状态灯与模组说明。 */
+  function applyHealth(h) {
+    const o = (h && (h.data || h)) || {};
+    const dot = connLight.querySelector('.dot');
+    const label = connLight.querySelector('.status-light__label');
+    const okAll = o.status === 'ok' && o.db_ok !== false;
+    if (dot) dot.className = `dot dot--${okAll ? 'ok' : 'warning'}`;
+    if (label) label.textContent = okAll ? '已连接' : '降级运行';
+    const parts = [];
+    if (o.db_ok === false) parts.push('数据库异常');
+    if (o.dbus_ok === false) parts.push('D-Bus 不可用');
+    if (o.ofono_ok === false) parts.push('oFono 未注册');
+    else if (o.modem_ready === false) parts.push('无 Modem 对象');
+    modemLine.textContent = parts.length ? parts.join(' / ') : '就绪';
+  }
 
   // 趋势图
   const chartCard = card({ title: '实时趋势', subtitle: 'CPU / 流量 / 信号（最近 300 点）', span: 12, icon: 'activity' });
@@ -165,15 +183,17 @@ export function render(container, context) {
 
   function applyBand(band) {
     const o = fieldOf(band, 'data', band) || {};
-    signalRows.carrier.set(fieldOf(o, 'carrier', fieldOf(infoCarry(), 'carrier')));
+    // current_band 现在直接带 carrier；取不到时再回退 /api/info。
+    signalRows.carrier.set(fieldOf(o, 'carrier', infoCarry().carrier));
     signalRows.network.set(fieldOf(o, 'network_type', fieldOf(o, 'mode')));
     signalRows.band.set(fieldOf(o, 'band', fieldOf(o, 'current_band')));
     signalRows.rsrp.set(fieldOf(o, 'rsrp'));
     signalRows.rsrq.set(fieldOf(o, 'rsrq'));
     signalRows.sinr.set(fieldOf(o, 'sinr'));
-    signalRows.imei.set(fieldOf(o, 'imei'));
+    signalRows.imei.set(fieldOf(o, 'imei', infoCarry().imei));
     const rsrp = Number(fieldOf(o, 'rsrp', 0)) || 0;
-    push(signalSeries, rsrp);
+    // 无 Modem 时 rsrp 为 null，不推送 0，避免曲线被压成一条直线。
+    if (rsrp) push(signalSeries, rsrp);
     const dashSignal = document.getElementById('dash-signal');
     if (dashSignal) dashSignal.textContent = rsrp ? `${rsrp} dBm` : '—';
   }
@@ -212,11 +232,12 @@ export function render(container, context) {
 
   async function loadAll() {
     try {
-      const [info, band, total, charge] = await Promise.all([
+      const [info, band, total, charge, health] = await Promise.all([
         ctx.api('/api/info', { signal: ctx.signal }),
         ctx.api('/api/current_band', { signal: ctx.signal }).catch(() => null),
         ctx.api('/api/get/Total', { signal: ctx.signal }).catch(() => null),
-        ctx.api('/api/charge/config', { signal: ctx.signal }).catch(() => null)
+        ctx.api('/api/charge/config', { signal: ctx.signal }).catch(() => null),
+        ctx.api('/api/health', { signal: ctx.signal }).catch(() => null)
       ]);
       infoCache = fieldOf(info, 'data', info) || info || {};
       const cpu = applyInfo(info);
@@ -224,6 +245,7 @@ export function render(container, context) {
       applyBand(band);
       applyTotal(total);
       applyCharge(charge);
+      if (health) applyHealth(health);
       updateChart();
     } catch (err) {
       ctx.toast.error(ctx.t('common.requestFailed'));
@@ -241,9 +263,15 @@ export function render(container, context) {
     push(trafficSeries, Number(o.rate != null ? o.rate : o.delta) || 0);
     updateChart();
   });
+  ctx.wsSubscribe('health', (p) => {
+    applyHealth(p);
+  });
   ctx.wsSubscribe('signal', (p) => {
     const o = p && (p.data || p) || {};
-    push(signalSeries, Number(o.rsrp) || 0);
+    const v = Number(o.rsrp);
+    // 无 Modem 时后端给 null，跳过以免污染曲线。
+    if (!Number.isFinite(v) || v === 0) return;
+    push(signalSeries, v);
     updateChart();
   });
 

@@ -41,8 +41,12 @@ pub fn router(state: AppState) -> Router {
         // ---------------- Modem / 网络 ----------------
         .route("/api/at", post(h::at))
         .route("/api/set_network", post(h::set_network))
-        .route("/api/switch", post(h::switch_slot))
-        .route("/api/airplane_mode", post(h::airplane_mode))
+        .route("/api/get/network_mode", get(h::network_mode))
+        .route("/api/switch", get(h::sim_slot).post(h::switch_slot))
+        .route(
+            "/api/airplane_mode",
+            get(h::airplane_status).post(h::airplane_mode),
+        )
         .route("/api/bands", get(h::bands))
         .route("/api/current_band", get(h::current_band))
         .route("/api/lock_bands", post(h::lock_bands))
@@ -70,7 +74,12 @@ pub fn router(state: AppState) -> Router {
         .route("/api/usb-advance", post(h::usb_advance))
         // ---------------- APN ----------------
         .route("/api/apn", get(h::apn_config).post(h::apn_set))
-        .route("/api/apn/config", get(h::apn_config).post(h::apn_set))
+        // 注意：/api/apn 是 APN 参数，/api/apn/config 是「模式 + 绑定模板」，
+        // 两者语义不同，此前共用一个 handler 导致模式永远读不到。
+        .route(
+            "/api/apn/config",
+            get(h::apn_mode_config).post(h::apn_mode_set),
+        )
         .route(
             "/api/apn/templates",
             get(h::apn_templates).post(h::apn_template_create),

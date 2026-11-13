@@ -136,19 +136,95 @@ impl NetworkService {
             Ok(o) => parse_netdev_totals(&o.stdout),
             Err(_) => (0, 0),
         };
+        let total = rx + tx;
         let cfg = self.traffic_config().await?;
+        let (today, month) = self.traffic_delta(total).await;
         // 旧字段别名：前端读取 total（小写）；Total 为 v2.x 原始键名，两者同值。
-        // today / month 无历史累计表，返回 0 而非缺字段，避免前端显示 undefined。
+        // limit 是对 much 的语义别名，前端进度条按 total/limit 计算。
         Ok(json!({
-            "Total": rx + tx,
-            "total": rx + tx,
+            "Total": total,
+            "total": total,
             "rx": rx,
             "tx": tx,
-            "today": 0,
-            "month": 0,
+            "today": today,
+            "month": month,
             "switch": cfg.get("switch").cloned().unwrap_or(json!(0)),
             "much": cfg.get("much").cloned().unwrap_or(json!(0)),
+            "limit": cfg.get("much").cloned().unwrap_or(json!(0)),
+            // 说明取值口径，避免把「本次开机累计」误读为「账期累计」。
+            "today_source": "since_boot",
+            "note": "今日/本月按 /proc/net/dev 计数差值计算，重启后计数归零，跨日/跨月自动重置基线",
         }))
+    }
+
+    /// 计算今日 / 本月流量增量。
+    ///
+    /// `/proc/net/dev` 只有开机以来的累计值，没有历史表。这里用「基线快照」
+    /// 的方式求差值：记录当日起点与当月起点，跨日/跨月或设备重启时重置基线。
+    async fn traffic_delta(&self, total: u64) -> (u64, u64) {
+        use chrono::Local;
+        let today = Local::now().format("%Y-%m-%d").to_string();
+        let month = Local::now().format("%Y-%m").to_string();
+        let snap = self
+            .db
+            .config_get("traffic.snapshot")
+            .await
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| json!({}));
+        let snap_day = snap.get("day").and_then(|v| v.as_str()).unwrap_or("");
+        let snap_month = snap.get("month").and_then(|v| v.as_str()).unwrap_or("");
+        let has_snap = snap.get("last_total").and_then(|v| v.as_u64());
+        // 快照版本：v1 会把「首次运行」的基线记成 0，导致今日=开机以来全部流量。
+        // 检测到旧版本快照时一次性重建基线，避免把历史累计算进当天。
+        let schema_ok = snap.get("v").and_then(|v| v.as_u64()) == Some(2);
+
+        let last_total = if schema_ok { has_snap.unwrap_or(total) } else { total };
+        // total 比上次小说明设备重启过，内核计数已归零，基线必须一起清零。
+        let rebooted = schema_ok && has_snap.map(|l| total < l).unwrap_or(false);
+        let mut day_base = if schema_ok {
+            snap.get("day_base").and_then(|v| v.as_u64()).unwrap_or(total)
+        } else {
+            total
+        };
+        let mut month_base = if schema_ok {
+            snap.get("month_base")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(total)
+        } else {
+            total
+        };
+        if rebooted {
+            // 设备重启后 /proc/net/dev 归零，重启前的当日用量已无法得知。
+            // 这里把当前值作为新基线（今日从 0 重新累计），而不是把本次开机
+            // 以来的全部流量当作「今日」——后者会让用户看到明显偏大的数字。
+            day_base = total;
+            month_base = total;
+        }
+        // 跨日 / 跨月：以上一次采样值作为新基线，避免把整段历史算进当天。
+        if schema_ok && !rebooted && snap_day != today {
+            day_base = last_total;
+        }
+        if schema_ok && !rebooted && snap_month != month {
+            month_base = last_total;
+        }
+
+        let _ = self
+            .db
+            .config_set(
+                "traffic.snapshot",
+                &json!({
+                    "v": 2,
+                    "day": today,
+                    "month": month,
+                    "day_base": day_base,
+                    "month_base": month_base,
+                    "last_total": total,
+                }),
+            )
+            .await;
+
+        (total.saturating_sub(day_base), total.saturating_sub(month_base))
     }
 
     pub async fn traffic_config(&self) -> AppResult<Value> {
@@ -168,6 +244,8 @@ impl NetworkService {
         // 空对象表示清除统计（旧版行为兼容）。
         if payload.as_object().map(|m| m.is_empty()).unwrap_or(false) {
             self.db.config_set("traffic.config", &json!({"switch": 0, "much": 0})).await?;
+            // 清除统计必须同时清基线，否则「今日/本月」会把清除前的量继续算进去。
+            self.db.config_delete("traffic.snapshot").await?;
             return Ok(json!({"status": "ok", "cleared": true}));
         }
         self.db
@@ -217,12 +295,18 @@ impl NetworkService {
             cfg["health"] = json!(v.trim());
         }
         if level.is_none() {
-            // 无电池节点（本机为模组形态）：显式给出空值，避免前端出现 undefined。
+            // 无电池节点（本机为模组形态，实测 /sys/class/power_supply 为空）。
+            // 显式给出空值 + supported=false，让前端显示「本机无电池」而不是
+            // 一排破折号，避免被误判为读取失败。
             for key in ["level", "capacity", "voltage", "current", "temperature", "status", "health"] {
                 if !cfg.get(key).map(|v| !v.is_null()).unwrap_or(false) {
                     cfg[key] = json!("");
                 }
             }
+            cfg["supported"] = json!(false);
+            cfg["note"] = json!("设备未暴露 /sys/class/power_supply，本机无电池管理能力");
+        } else {
+            cfg["supported"] = json!(true);
         }
         Ok(cfg)
     }
@@ -443,6 +527,61 @@ impl NetworkService {
     pub async fn apn_clear(&self) -> AppResult<Value> {
         self.db.config_delete("apn.config").await?;
         Ok(json!({"status": "ok", "cleared": true}))
+    }
+
+    /// APN 工作模式（自动 / 手动 + 绑定模板）。
+    ///
+    /// 原 `/api/apn/config` 与 `/api/apn` 共用同一个 handler，返回的是 APN
+    /// 参数字典，而「APN 模式」页面读的是 `mode` / `template_id` / `auto_start`，
+    /// 三个字段永远取不到，模式恒显示「自动（系统管理）」。
+    /// 这里把两者拆成独立语义，并用独立配置键，避免互相覆盖。
+    pub async fn apn_mode_config(&self) -> AppResult<Value> {
+        let raw = self
+            .db
+            .config_get("apn.mode")
+            .await?
+            .unwrap_or_else(|| json!({}));
+        Ok(json!({
+            "mode": raw.get("mode").and_then(|v| v.as_u64()).unwrap_or(0),
+            "template_id": raw.get("template_id").and_then(|v| v.as_u64()).unwrap_or(0),
+            "auto_start": raw.get("auto_start").and_then(|v| v.as_u64()).unwrap_or(0),
+        }))
+    }
+
+    pub async fn apn_mode_set(&self, payload: &Value) -> AppResult<Value> {
+        let mode = payload.get("mode").and_then(|v| v.as_u64()).unwrap_or(0);
+        if mode > 1 {
+            return Err(bad_request("APN 模式非法"));
+        }
+        let template_id = payload
+            .get("template_id")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        let auto_start = payload
+            .get("auto_start")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        if mode == 1 && template_id == 0 {
+            return Err(bad_request("手动模式必须选择一个模板"));
+        }
+        // 只写 apn.mode，绝不触碰 apn.config（APN 参数），
+        // 否则保存模式会把参数冲掉。
+        self.db
+            .config_set(
+                "apn.mode",
+                &json!({
+                    "mode": mode,
+                    "template_id": template_id,
+                    "auto_start": auto_start,
+                }),
+            )
+            .await?;
+        Ok(json!({
+            "status": "ok",
+            "mode": mode,
+            "template_id": template_id,
+            "auto_start": auto_start,
+        }))
     }
 
     // ---------------- 手机壳模式 ----------------

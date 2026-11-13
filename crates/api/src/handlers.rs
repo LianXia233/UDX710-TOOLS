@@ -97,7 +97,43 @@ pub async fn auth_status(
 // ============================ 系统 ============================
 
 pub async fn info(State(s): State<AppState>) -> ApiResult<Json<Value>> {
-    done(s.services.network.system_info(VERSION)).await
+    let mut value = s
+        .services
+        .network
+        .system_info(VERSION)
+        .await
+        .map_err(ApiError::from)?;
+
+    // 模组标识只能从 oFono 取：Data 来源缺失时保持空串，绝不伪造。
+    // 「Modem 信息」页读的正是 model / imei / iccid / carrier / firmware / serial。
+    if let Ok(status) = s.services.modem.status().await {
+        let read = |key: &str| status.get(key).cloned().unwrap_or(json!(""));
+        for (dst, src) in [
+            ("model", "model"),
+            ("modem_model", "model"),
+            ("imei", "imei"),
+            ("iccid", "iccid"),
+            ("imsi", "imsi"),
+            ("carrier", "carrier"),
+            ("operator", "operator"),
+            ("firmware", "firmware"),
+            ("serial", "serial"),
+        ] {
+            let v = read(src);
+            let empty = v.as_str().map(|t| t.is_empty()).unwrap_or(true);
+            if !empty {
+                value[dst] = v;
+            } else if value.get(dst).is_none() {
+                value[dst] = v;
+            }
+        }
+        value["modem_present"] = status.get("present").cloned().unwrap_or(json!(false));
+        value["modem_source"] = status
+            .get("source")
+            .cloned()
+            .unwrap_or(json!("unavailable"));
+    }
+    Ok(Json(value))
 }
 
 pub async fn health(State(s): State<AppState>) -> ApiResult<Json<Value>> {
@@ -195,8 +231,23 @@ pub async fn switch_slot(State(s): State<AppState>, Json(b): Json<Value>) -> Api
     done(s.services.modem.switch_slot(&b)).await
 }
 
+/// 当前 SIM 卡槽（本机固定卡槽 1）。
+pub async fn sim_slot(State(s): State<AppState>) -> ApiResult<Json<Value>> {
+    done(s.services.modem.sim_slot()).await
+}
+
 pub async fn airplane_mode(State(s): State<AppState>, Json(b): Json<Value>) -> ApiResult<Json<Value>> {
     done(s.services.modem.airplane_mode(&b)).await
+}
+
+/// 飞行模式当前状态（此前只有 POST，前端开关无法回显）。
+pub async fn airplane_status(State(s): State<AppState>) -> ApiResult<Json<Value>> {
+    done(s.services.modem.airplane_status()).await
+}
+
+/// 当前网络模式（此前只有 POST /api/set_network，下拉无法回显）。
+pub async fn network_mode(State(s): State<AppState>) -> ApiResult<Json<Value>> {
+    done(s.services.modem.network_mode()).await
 }
 
 pub async fn bands(State(s): State<AppState>) -> ApiResult<Json<Value>> {
@@ -331,6 +382,19 @@ pub async fn usb_advance(
 
 pub async fn apn_config(State(s): State<AppState>) -> ApiResult<Json<Value>> {
     done(s.services.network.apn_config()).await
+}
+
+/// APN 工作模式（自动 / 手动 + 绑定模板）。
+/// 与 `/api/apn`（APN 参数）语义分离：前端「APN 模式」页读的正是这三个键。
+pub async fn apn_mode_config(State(s): State<AppState>) -> ApiResult<Json<Value>> {
+    done(s.services.network.apn_mode_config()).await
+}
+
+pub async fn apn_mode_set(
+    State(s): State<AppState>,
+    Json(b): Json<Value>,
+) -> ApiResult<Json<Value>> {
+    done(s.services.network.apn_mode_set(&b)).await
 }
 
 pub async fn apn_set(State(s): State<AppState>, Json(b): Json<Value>) -> ApiResult<Json<Value>> {

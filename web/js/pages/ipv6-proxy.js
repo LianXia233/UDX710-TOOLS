@@ -22,13 +22,15 @@ export function render(container, context) {
   const statusCard = ctx.card({ title: '运行状态', span: 6, icon: 'activity' });
   const statusLabel = el('span', { class: 'badge badge--muted', text: '读取中…' });
   const ipv6Label = el('span', { class: 'kv__v', text: '—' });
+  const statusHint = el('p', { class: 'field__hint', text: '' });
   const startBtn = button(ctx.t('common.start'), { variant: 'primary', icon: 'play', onClick: () => action('start') });
   const stopBtn = button(ctx.t('common.stop'), { variant: 'danger', icon: 'power', onClick: () => action('stop') });
   const restartBtn = button(ctx.t('common.restart'), { variant: 'outline', icon: 'refresh', onClick: () => action('restart') });
   statusCard.body.append(
     el('div', { class: 'kv' }, el('span', { class: 'kv__k', text: '状态' }), statusLabel),
     el('div', { class: 'kv' }, el('span', { class: 'kv__k', text: 'IPv6 地址' }), ipv6Label),
-    el('div', { class: 'row' }, startBtn, stopBtn, restartBtn));
+    el('div', { class: 'row' }, startBtn, stopBtn, restartBtn),
+    statusHint);
   grid.appendChild(statusCard.el);
 
   // 配置
@@ -158,6 +160,9 @@ export function render(container, context) {
       statusLabel.textContent = running ? ctx.t('status.running') : ctx.t('status.stopped');
       statusLabel.className = `badge ${running ? 'badge--ok' : 'badge--muted'}`;
       ipv6Label.textContent = safeText(o.ipv6 || o.address || res.ipv6, '—');
+      // implemented=false 表示当前版本只维护状态位、未托管真实转发进程，
+      // 如实展示，避免把「已启动」误解为「转发已生效」。
+      statusHint.textContent = o.implemented === false ? (o.note || '') : '';
     } catch (e) { statusLabel.textContent = '未知'; }
   }
 

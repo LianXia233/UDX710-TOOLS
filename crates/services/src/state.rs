@@ -141,13 +141,36 @@ impl AppServices {
         }))
     }
 
+    /// 健康检查。
+    ///
+    /// `dbus_ok` 原本只表示「D-Bus 客户端对象创建成功」，与 oFono 是否可用、
+    /// 是否托管了 Modem 完全无关，导致面板在模组无数据时仍报 `ok`。
+    /// 这里改为三级判定，并用实时探测结果刷新缓存供 WS 推送复用。
     pub async fn health(&self) -> AppResult<HealthStatus> {
+        let dbus_ok = self.dbus_ok.load(Ordering::Relaxed);
+        let ofono_ok = self.modem.dbus_available().await;
+        let modem_ready = ofono_ok && self.modem.modem_count().await > 0;
+        // 缓存 oFono 可用性，供 /api/ws 的低成本推送复用。
+        self.dbus_ok.store(ofono_ok, Ordering::Relaxed);
+
+        let status = if !dbus_ok {
+            "degraded"
+        } else if !ofono_ok {
+            "degraded"
+        } else if !modem_ready {
+            "degraded"
+        } else {
+            "ok"
+        };
+
         Ok(HealthStatus {
-            status: "ok",
+            status,
             version: env!("CARGO_PKG_VERSION").to_string(),
             uptime_secs: self.started_at.elapsed().as_secs(),
             db_ok: self.db.health().await.is_ok(),
-            dbus_ok: self.dbus_ok.load(Ordering::Relaxed),
+            dbus_ok,
+            ofono_ok,
+            modem_ready,
             active_tasks: self.tasks.active(),
         })
     }

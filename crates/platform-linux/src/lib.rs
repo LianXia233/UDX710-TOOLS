@@ -20,7 +20,7 @@ pub use dbus::{DbusClient, OFONO_SERVICE};
 pub use netif::{interface_stats, list_interfaces, system_info};
 pub use path::{atomic_write, resolve_under, safe_component, MAX_COMPONENT_LEN};
 pub use shell::{
-    redact_sensitive, InteractiveShell, ShellExecutor, ShellPolicy,
+    redact_sensitive, InteractiveShell, ShellExecutor, ShellPolicy, ShellReader, ShellWriter,
     DEFAULT_MAX_COMMAND_LEN, DEFAULT_SESSION_OUTPUT_CAP,
 };
 pub use sysfs::{is_allowed_absolute, Sysfs, ALLOWED_ROOTS};

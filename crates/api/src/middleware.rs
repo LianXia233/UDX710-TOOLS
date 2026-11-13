@@ -177,13 +177,26 @@ pub async fn gate(
         return ApiError::from(AppError::RateLimited).into_response();
     }
 
-    if !is_public(&method, &path) {
-        // header token 优先；仅实时通道握手允许回退到 query token。
-        // 转成 String 是为了在 await 之后仍可安全地取得 req 的可变借用。
-        let token = bearer_token(req.headers())
-            .map(str::to_string)
-            .or_else(|| query_token(&req))
-            .unwrap_or_default();
+    let public = is_public(&method, &path);
+    // header token 优先；仅非公开路由允许回退到 query token（实时通道握手）。
+    // 转成 String 是为了在 await 之后仍可安全地取得 req 的可变借用。
+    let token = bearer_token(req.headers())
+        .map(str::to_string)
+        .or_else(|| if public { None } else { query_token(&req) })
+        .unwrap_or_default();
+
+    if public {
+        // 公开路由也要「认识」已登录用户：`/api/auth/status` 靠 principal 判断
+        // 会话是否有效。此前公开路由整段跳过 token 解析，导致即使带着有效
+        // token 也返回 authenticated:false，前端每次刷新都被踢回登录页。
+        // 这里只做尽力识别：token 缺失或无效都照常放行。
+        if !token.is_empty() {
+            if let Ok(principal) = state.services.auth.verify(&token).await {
+                req.extensions_mut().insert(principal);
+                req.extensions_mut().insert(SessionToken(token));
+            }
+        }
+    } else {
         let principal = match state.services.auth.verify(&token).await {
             Ok(p) => p,
             Err(e) => return ApiError::from(e).into_response(),

@@ -18,6 +18,45 @@ function writeMeta(meta) {
   try { sessionStorage.setItem(META_KEY, JSON.stringify(meta)); } catch (e) { /* 忽略 */ }
 }
 
+/**
+ * 持久副本。
+ *
+ * sessionStorage 在「同一标签页刷新」时本来会保留，但以下情况会丢：
+ * 隐私模式、浏览器重启、从其他标签/快捷方式重新打开。丢失后前端就要求
+ * 重新登录，体验很差。这里在 localStorage 留一份带过期时间的副本作为
+ * 兜底；真正的授权仍由服务端 Bearer 校验与 24h TTL 决定。
+ */
+const PERSIST_KEY = 'udx.auth.persist';
+
+function readPersisted() {
+  try {
+    const raw = localStorage.getItem(PERSIST_KEY);
+    if (!raw) return null;
+    const obj = JSON.parse(raw);
+    if (!obj || !obj.token) return null;
+    if (obj.expiresAt && Date.now() > obj.expiresAt) {
+      localStorage.removeItem(PERSIST_KEY);
+      return null;
+    }
+    return obj;
+  } catch (e) {
+    return null;
+  }
+}
+
+function writePersisted(token, meta) {
+  try {
+    localStorage.setItem(PERSIST_KEY, JSON.stringify({
+      token,
+      expiresAt: (meta && meta.expiresAt) || 0
+    }));
+  } catch (e) { /* 忽略 */ }
+}
+
+function dropPersisted() {
+  try { localStorage.removeItem(PERSIST_KEY); } catch (e) { /* 忽略 */ }
+}
+
 /** 仅解析 JWT 的 exp 做本地过期判断，不做验签（验签属于服务端职责）。 */
 function decodeExp(token) {
   const parts = String(token || '').split('.');
@@ -34,7 +73,18 @@ function decodeExp(token) {
 
 export function getToken() {
   try {
-    const token = sessionStorage.getItem(TOKEN_KEY);
+    let token = sessionStorage.getItem(TOKEN_KEY) || '';
+    if (!token) {
+      const saved = readPersisted();
+      if (saved) {
+        token = saved.token;
+        // 回填会话副本，后续走快路径。
+        try { sessionStorage.setItem(TOKEN_KEY, token); } catch (e) { /* 忽略 */ }
+        if (!readMeta().expiresAt && saved.expiresAt) {
+          writeMeta({ issuedAt: 0, expiresAt: saved.expiresAt });
+        }
+      }
+    }
     if (!token) return '';
     const meta = readMeta();
     if (meta.expiresAt && Date.now() > meta.expiresAt) {
@@ -58,6 +108,7 @@ export function setToken(token, ttlSeconds) {
     meta.expiresAt = exp * 1000;
   }
   writeMeta(meta);
+  writePersisted(token, meta);
   store.set('authenticated', true);
   events.emit('auth:login', { token });
   return token;
@@ -68,6 +119,7 @@ export function clearToken() {
     sessionStorage.removeItem(TOKEN_KEY);
     sessionStorage.removeItem(META_KEY);
   } catch (e) { /* 忽略 */ }
+  dropPersisted();
   store.set('authenticated', false);
   events.emit('auth:logout', {});
 }

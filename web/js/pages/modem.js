@@ -28,6 +28,8 @@ export function render(container, context) {
   const bandCard = ctx.card({ title: '当前连接', subtitle: '/api/current_band', span: 6, icon: 'signal' });
   const bandLabels = ['网络制式', '频段', '频点 ARFCN', 'PCI', 'RSRP', 'RSRQ', 'SINR', 'QCI'];
   for (const l of bandLabels) bandCard.body.appendChild(kv(l, bandRef));
+  const bandHint = el('p', { class: 'field__hint', text: '' });
+  bandCard.body.appendChild(bandHint);
 
   const cellCard = ctx.card({ title: '小区 / 邻区', subtitle: '/api/cells', span: 12, icon: 'network' });
   const refreshBtn = button(ctx.t('common.refresh'), { variant: 'ghost sm', icon: 'refresh', onClick: load });
@@ -45,6 +47,8 @@ export function render(container, context) {
     emptyText: '暂无小区信息'
   });
   cellCard.body.appendChild(cellTable.el);
+  const cellHint = el('p', { class: 'field__hint', text: '' });
+  cellCard.body.insertBefore(cellHint, cellTable.el);
 
   grid.append(infoCard.el, bandCard.el, cellCard.el);
 
@@ -54,11 +58,10 @@ export function render(container, context) {
 
   async function load() {
     try {
-      const [info, band, cells, bands] = await Promise.all([
+      const [info, band, cells] = await Promise.all([
         ctx.api('/api/info', { signal: ctx.signal }),
         ctx.api('/api/current_band', { signal: ctx.signal }).catch(() => null),
-        ctx.api('/api/cells', { signal: ctx.signal }).catch(() => null),
-        ctx.api('/api/bands', { signal: ctx.signal }).catch(() => null)
+        ctx.api('/api/cells', { signal: ctx.signal }).catch(() => null)
       ]);
       const i = fieldOf(info, 'data', info) || {};
       setRef(infoRef, '设备型号', fieldOf(i, 'model', fieldOf(i, 'modem_model')));
@@ -79,11 +82,17 @@ export function render(container, context) {
       setRef(bandRef, 'RSRQ', fieldOf(b, 'rsrq'));
       setRef(bandRef, 'SINR', fieldOf(b, 'sinr'));
       setRef(bandRef, 'QCI', fieldOf(b, 'qci'));
+      bandHint.textContent = b.available === false
+        ? (b.reason || '模组未就绪，无法读取当前连接参数')
+        : '';
 
-      // 若 cells 为空而 bands 有内容，用 bands 作为补充展示
-      let rows = asArray(cells, ['cells', 'neighbors']);
-      if (!rows.length) rows = asArray(bands, ['bands']);
+      // 小区表只接受真实小区数据；此前会用频段列表兜底，导致表格里出现
+      // 类型/ARFCN/PCI 全空的行，属于错误展示。
+      const rows = asArray(cells, ['cells', 'neighbors']);
       cellTable.setRows(rows);
+      cellHint.textContent = rows.length
+        ? ''
+        : (fieldOf(cells, 'reason', '') || '');
     } catch (err) {
       ctx.toast.error(ctx.t('common.requestFailed'));
     }

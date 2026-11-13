@@ -68,14 +68,23 @@ export function render(container, context) {
       const res = await ctx.api('/api/charge/config', { signal: ctx.signal });
       const o = fieldOf(res, 'data', res) || {};
       const set = (k, v) => { if (rows[k]) rows[k].textContent = safeText(v); };
-      const level = Number(fieldOf(o, 'level', fieldOf(o, 'capacity', 0))) || 0;
-      set('level', formatPercent(level));
-      levelBar.style.width = `${Math.min(100, level)}%`;
-      set('status', fieldOf(o, 'status', fieldOf(o, 'charging')));
-      set('health', fieldOf(o, 'health'));
-      set('voltage', fieldOf(o, 'voltage'));
-      set('current', fieldOf(o, 'current'));
-      set('temperature', fieldOf(o, 'temperature'));
+      // supported=false 表示设备没有 /sys/class/power_supply（本机为模组形态），
+      // 此时显示「本机无电池」而不是一排破折号，避免被误判为读取失败。
+      if (o.supported === false) {
+        for (const k of ['level', 'status', 'health', 'voltage', 'current', 'temperature']) {
+          set(k, '本机无电池');
+        }
+        levelBar.style.width = '0%';
+      } else {
+        const level = Number(fieldOf(o, 'level', fieldOf(o, 'capacity', 0))) || 0;
+        set('level', formatPercent(level));
+        levelBar.style.width = `${Math.min(100, level)}%`;
+        set('status', fieldOf(o, 'status', fieldOf(o, 'charging')));
+        set('health', fieldOf(o, 'health'));
+        set('voltage', fieldOf(o, 'voltage'));
+        set('current', fieldOf(o, 'current'));
+        set('temperature', fieldOf(o, 'temperature'));
+      }
       enabled.input.checked = !!(o.enabled !== undefined ? o.enabled : res.enabled);
       if (o.startThreshold != null) start.input.value = o.startThreshold;
       if (o.stopThreshold != null) stop.input.value = o.stopThreshold;

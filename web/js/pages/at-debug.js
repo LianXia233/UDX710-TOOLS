@@ -47,6 +47,23 @@ export function render(container, context) {
     try {
       const res = await ctx.api('/api/at', { method: 'POST', body: { command: cmd }, signal: ctx.signal });
       const o = fieldOf(res, 'data', res) || {};
+      // 失败按 error_kind 分类提示，不再把整段 JSON 打印给用户。
+      if (o.status === 'error' || o.outcome === 'failed') {
+        const kind = o.error_kind || 'at_unavailable';
+        const hints = {
+          modem_absent: '模组未就绪：oFono 未托管 Modem 对象，AT 命令无法下发',
+          dbus_timeout: 'AT 通道超时，请检查 /api/health 中的 dbus_ok / ofono_ok',
+          at_unavailable: 'AT 通道不可用'
+        };
+        appendLine(`[${kind}] ${hints[kind] || safeText(o.message, '命令失败')}`, 'terminal__line--error');
+        if (o.at_implemented === false) {
+          appendLine('说明：当前 AT 后端为只读占位实现，不会向模组串口下发命令。', 'terminal__line--system');
+        }
+        return;
+      }
+      if (o.at_implemented === false) {
+        appendLine('说明：以下内容是 oFono Modem 属性回显，并非模组 AT 应答。', 'terminal__line--system');
+      }
       const text = typeof o === 'string' ? o
         : (o.result != null ? o.result : (o.output != null ? o.output : JSON.stringify(res, null, 2)));
       appendLine(safeText(text, ''));

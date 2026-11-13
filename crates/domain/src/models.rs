@@ -28,7 +28,13 @@ pub struct HealthStatus {
     pub version: String,
     pub uptime_secs: u64,
     pub db_ok: bool,
+    /// 系统总线是否可连（只反映传输层，不代表 oFono 可用）。
     pub dbus_ok: bool,
+    /// oFono 是否已在总线上注册 `org.ofono`。
+    pub ofono_ok: bool,
+    /// oFono 是否真的托管了 Modem 对象。为 false 时所有模组数据都不可用，
+    /// 前端据此区分「设备没数据」与「面板坏了」。
+    pub modem_ready: bool,
     pub active_tasks: usize,
 }
 
@@ -184,6 +190,18 @@ pub struct NetifInfo {
     pub tx_bytes: u64,
     #[serde(default)]
     pub monitored: bool,
+    /// 硬件地址，读 `/sys/class/net/<name>/address`；不可读时为空串。
+    #[serde(default)]
+    pub mac: String,
+    /// IPv4 地址，来自 `getifaddrs`；无地址时为空串。
+    #[serde(default)]
+    pub ipv4: String,
+    /// 由 `/sys/class/net/<name>/flags` 的 IFF_UP 位判定，比 operstate 更准
+    ///（点对点接口常为 unknown 但实际可用）。
+    #[serde(default)]
+    pub up: bool,
+    #[serde(default)]
+    pub mtu: u64,
     #[serde(flatten)]
     pub extra: BTreeMap<String, Value>,
 }

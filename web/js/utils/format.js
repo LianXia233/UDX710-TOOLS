@@ -110,6 +110,16 @@ export function asArray(payload, keys = []) {
   for (const key of candidates) {
     if (Array.isArray(payload[key])) return payload[key];
   }
+  // 再下一层：后端改用 { data: { cells: [...] } } 包装时也能取到。
+  // 原实现只看顶层与 Code/Data 解包，一旦加 data 包装，所有列表页会同时变空。
+  for (const wrapper of ['Data', 'data']) {
+    const inner = payload[wrapper];
+    if (inner && typeof inner === 'object' && !Array.isArray(inner)) {
+      for (const key of candidates) {
+        if (Array.isArray(inner[key])) return inner[key];
+      }
+    }
+  }
   const inner = unwrap(payload);
   if (Array.isArray(inner)) return inner;
   return [];

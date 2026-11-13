@@ -69,10 +69,64 @@ impl ModemService {
                         out["source"] = json!("ofono");
                         out["modem_paths"] = json!(paths);
                         if let Some(path) = paths.first() {
-                            if let Ok(props) = dbus
-                                .ofono_properties(path, "org.ofono.NetworkRegistration")
-                                .await
+                            // 模组标识：Manufacturer / Model / Revision / Serial。
+                            if let Ok(props) =
+                                dbus.ofono_properties(path, "org.ofono.Modem").await
                             {
+                                out["manufacturer"] = props
+                                    .get("Manufacturer")
+                                    .cloned()
+                                    .unwrap_or(json!(""));
+                                out["model"] = props.get("Model").cloned().unwrap_or(json!(""));
+                                out["firmware"] =
+                                    props.get("Revision").cloned().unwrap_or(json!(""));
+                                out["serial"] = props.get("Serial").cloned().unwrap_or(json!(""));
+                                // 多数模组的 Serial 就是 IMEI（15 位纯数字），
+                                // 满足该形态才当 IMEI 用，避免把非 IMEI 序列号误标。
+                                if let Some(serial) = out["serial"].as_str() {
+                                    if serial.len() == 15
+                                        && serial.chars().all(|c| c.is_ascii_digit())
+                                    {
+                                        out["imei"] = json!(serial);
+                                    }
+                                }
+                                out["powered"] = props
+                                    .get("Powered")
+                                    .cloned()
+                                    .unwrap_or(json!(false));
+                            }
+                            // SIM：CardIdentifier 是 ICCID（部分实现带 'F' 填充），
+                            // SubscriberIdentity 是 IMSI。
+                            if let Ok(props) =
+                                dbus.ofono_properties(path, "org.ofono.SimManager").await
+                            {
+                                let iccid = props
+                                    .get("CardIdentifier")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("")
+                                    .trim_end_matches('F')
+                                    .trim_end_matches('f')
+                                    .to_string();
+                                out["iccid"] = json!(iccid);
+                                out["imsi"] = props
+                                    .get("SubscriberIdentity")
+                                    .cloned()
+                                    .unwrap_or(json!(""));
+                                // SIM 是否在位直接决定有没有网络注册与信号，
+                                // 前端据此把「无数据」解释成「未插卡」。
+                                out["sim_present"] = props
+                                    .get("Present")
+                                    .cloned()
+                                    .unwrap_or(json!(false));
+                            }
+                            // 注册态：运营商名与制式。
+                            if let Ok(props) =
+                                dbus.ofono_properties(path, "org.ofono.NetworkRegistration").await
+                            {
+                                out["operator"] =
+                                    props.get("Name").cloned().unwrap_or(json!(""));
+                                out["network_type"] =
+                                    props.get("Technology").cloned().unwrap_or(json!(""));
                                 out["registration"] = props;
                             }
                         }
@@ -117,15 +171,130 @@ impl ModemService {
 
     // ---------------- 频段 / 小区 ----------------
 
-    pub async fn bands(&self) -> AppResult<Value> {
-        Ok(self
-            .cfg_get("modem.bands", json!({"bands": [], "locked": [], "current": ""}))
-            .await?)
+    /// oFono 当前托管的 Modem 数量。为 0 时所有模组数据都不可用。
+    pub async fn modem_count(&self) -> usize {
+        match &self.dbus {
+            Some(c) => c.ofono_modem_paths().await.map(|p| p.len()).unwrap_or(0),
+            None => 0,
+        }
     }
 
+    async fn modem_path(&self) -> Option<String> {
+        let dbus = self.dbus.as_ref()?;
+        dbus.ofono_modem_paths()
+            .await
+            .ok()
+            .and_then(|p| p.first().cloned())
+    }
+
+    /// 服务小区详细参数（RSRP/RSRQ/PCI/ARFCN 的唯一标准来源）。
+    /// 老版本 oFono 或未注册网络时可能失败，调用方按 None 降级。
+    async fn serving_cell(&self) -> Option<Value> {
+        let dbus = self.dbus.as_ref()?;
+        let path = self.modem_path().await?;
+        dbus.ofono_call(&path, "org.ofono.NetworkMonitor", "GetServingCellInformation")
+            .await
+            .ok()
+    }
+
+    async fn iface_props(&self, interface: &str) -> Option<Value> {
+        let dbus = self.dbus.as_ref()?;
+        let path = self.modem_path().await?;
+        dbus.ofono_properties(&path, interface).await.ok()
+    }
+
+    /// 网络注册信息（运营商 / 制式 / 注册状态）。
+    async fn registration(&self) -> Option<Value> {
+        self.iface_props("org.ofono.NetworkRegistration").await
+    }
+
+    /// SIM 是否在位。
+    async fn sim_present(&self) -> bool {
+        self.iface_props("org.ofono.SimManager")
+            .await
+            .and_then(|p| p.get("Present").and_then(|v| v.as_bool()))
+            .unwrap_or(false)
+    }
+
+    /// 设备支持的频段清单。
+    ///
+    /// 原实现只读 `modem.bands` 配置（默认为空），因此「频段锁定」永远没有
+    /// 可勾选项。这里改为：能连上 Modem 时用设备侧信息，否则回落到内置的
+    /// UDX710 常见频段表，并在响应里用 `available` / `source` 明确标注来源，
+    /// 前端据此区分「设备上报」与「内置候选」。
+    pub async fn bands(&self) -> AppResult<Value> {
+        let cfg = self
+            .cfg_get("modem.bands", json!({"bands": [], "locked": [], "current": ""}))
+            .await?;
+        let locked = cfg.get("locked").cloned().unwrap_or(json!([]));
+        let ready = self.modem_count().await > 0;
+        let serving = self.serving_cell().await;
+        let current = serving
+            .as_ref()
+            .and_then(|s| pick_str(s, &["Band", "band", "NRBand"]))
+            .unwrap_or_default();
+
+        Ok(json!({
+            "bands": BUILTIN_BANDS
+                .iter()
+                .map(|(id, name, tech)| json!({"id": id, "name": name, "technology": tech}))
+                .collect::<Vec<_>>(),
+            "locked": locked,
+            "current": current,
+            "available": ready,
+            "source": if ready { "builtin+device" } else { "builtin" },
+            "reason": if ready {
+                String::new()
+            } else {
+                "oFono 未托管 Modem 对象，以下为内置频段候选，锁定请求会先保存".to_string()
+            },
+        }))
+    }
+
+    /// 当前连接信息。字段集与前端 `modem.js` / `dashboard.js` 对齐，
+    /// 取不到的值给 null（而不是缺字段或空串），前端据此显示「—」。
     pub async fn current_band(&self) -> AppResult<Value> {
-        let bands = self.bands().await?;
-        Ok(json!({"band": bands.get("current").cloned().unwrap_or(json!(""))}))
+        let ready = self.modem_count().await > 0;
+        let serving = self.serving_cell().await;
+        let reg = self.registration().await;
+
+        let network_type = serving
+            .as_ref()
+            .and_then(|s| pick_str(s, &["Technology", "technology"]))
+            .or_else(|| reg.as_ref().and_then(|r| pick_str(r, &["Technology"])))
+            .unwrap_or_default();
+
+        let mut out = json!({
+            "band": serving
+                .as_ref()
+                .and_then(|s| pick_str(s, &["Band", "band", "NRBand"]))
+                .unwrap_or_default(),
+            "network_type": network_type,
+            "mode": network_type,
+            "arfcn": serving.as_ref().and_then(|s| pick_u64(s, &["AbsoluteRadioFrequencyChannelNumber", "Earfcn", "Arfcn"])),
+            "pci": serving.as_ref().and_then(|s| pick_u64(s, &["PhysicalCellId", "Pci"])),
+            "rsrp": serving.as_ref().and_then(|s| pick_i64(s, &["Rsrp", "RSRP"])),
+            "rsrq": serving.as_ref().and_then(|s| pick_i64(s, &["Rsrq", "RSRQ"])),
+            "sinr": serving.as_ref().and_then(|s| pick_i64(s, &["Sinr", "SINR"])),
+            "qci": Value::Null,
+            "carrier": reg.as_ref().and_then(|r| pick_str(r, &["Name", "OperatorName"])).unwrap_or_default(),
+            "registration": reg.as_ref().and_then(|r| pick_str(r, &["Status"])).unwrap_or_default(),
+            "strength": reg.as_ref().and_then(|r| pick_u64(r, &["Strength"])),
+            "available": ready && (serving.is_some() || reg.is_some()),
+            "source": if serving.is_some() { "networkmonitor" } else if reg.is_some() { "registration" } else { "none" },
+        });
+        let sim = if ready { self.sim_present().await } else { false };
+        out["sim_present"] = json!(sim);
+        if !ready {
+            out["reason"] = json!("oFono 未托管 Modem 对象，模组侧无数据可读");
+        } else if serving.is_none() && reg.is_none() {
+            out["reason"] = json!(if sim {
+                "Modem 已托管但未注册网络，或该 oFono 版本不提供 NetworkMonitor 接口"
+            } else {
+                "SIM 卡未插入（SimManager.Present=false），因此没有网络注册、运营商与信号数据"
+            });
+        }
+        Ok(out)
     }
 
     pub async fn lock_bands(&self, bands: &Value) -> AppResult<Value> {
@@ -153,10 +322,50 @@ impl ModemService {
         Ok(self.action_result("unlock_bands", true, "已清除频段锁定"))
     }
 
+    /// 小区与邻区。有 Modem 时用 NetworkMonitor 的服务小区信息填充；
+    /// 否则返回空表并带 `available:false` 与 `reason`，前端据此区分
+    /// 「设备没上报」和「页面坏了」。
     pub async fn cells(&self) -> AppResult<Value> {
-        Ok(self
+        let ready = self.modem_count().await > 0;
+        let cfg = self
             .cfg_get("modem.cells", json!({"cells": [], "locked": false}))
-            .await?)
+            .await?;
+        let locked = cfg.get("locked").cloned().unwrap_or(json!(false));
+
+        let mut rows: Vec<Value> = Vec::new();
+        if let Some(s) = self.serving_cell().await {
+            let tech = pick_str(&s, &["Technology", "technology"]).unwrap_or_default();
+            rows.push(json!({
+                "type": tech,
+                "technology": tech,
+                "band": pick_str(&s, &["Band", "band", "NRBand"]).unwrap_or_default(),
+                "arfcn": pick_u64(&s, &["AbsoluteRadioFrequencyChannelNumber", "Earfcn", "Arfcn"]),
+                "pci": pick_u64(&s, &["PhysicalCellId", "Pci"]),
+                "rsrp": pick_i64(&s, &["Rsrp", "RSRP"]),
+                "rsrq": pick_i64(&s, &["Rsrq", "RSRQ"]),
+                "status": "服务小区",
+                "serving": true,
+            }));
+        }
+
+        let available = ready && !rows.is_empty();
+        let mut out = json!({
+            "cells": rows,
+            "locked": locked,
+            "available": available,
+        });
+        if !available {
+            let sim = if ready { self.sim_present().await } else { false };
+            out["sim_present"] = json!(sim);
+            out["reason"] = json!(if !ready {
+                "oFono 未托管 Modem 对象，无法枚举小区与邻区"
+            } else if !sim {
+                "SIM 卡未插入（SimManager.Present=false），无服务小区可上报"
+            } else {
+                "Modem 已托管但未取得服务小区信息（可能未注册网络）"
+            });
+        }
+        Ok(out)
     }
 
     pub async fn lock_cell(&self, payload: &Value) -> AppResult<Value> {
@@ -181,26 +390,60 @@ impl ModemService {
 
     pub async fn set_network(&self, payload: &Value) -> AppResult<Value> {
         let mode = payload.get("mode").and_then(|v| v.as_str()).unwrap_or("");
-        if !matches!(mode, "auto" | "4g" | "5g" | "lte" | "nr" | "nr5g" | "wcdma" | "gsm") {
+        // nsa / sa 是前端「网络模式」下拉里的真实选项（5G NSA Only 等），
+        // 原白名单缺 nsa，导致选它必然 400。
+        if !matches!(
+            mode,
+            "auto" | "4g" | "5g" | "lte" | "nr" | "nr5g" | "nsa" | "sa" | "wcdma" | "gsm"
+        ) {
             return Err(bad_request("网络模式非法"));
         }
         self.cfg_set("network.mode", json!({"mode": mode})).await?;
         Ok(self.action_result("set_network", true, "网络模式配置已保存"))
     }
 
+    /// 当前网络模式，供「基础网络控制」回显（此前只有 POST，没有 GET）。
+    pub async fn network_mode(&self) -> AppResult<Value> {
+        let cfg = self.cfg_get("network.mode", json!({"mode": "auto"})).await?;
+        Ok(json!({
+            "mode": cfg.get("mode").cloned().unwrap_or(json!("auto")),
+            "options": ["auto", "nr5g", "nsa", "lte", "sa", "wcdma", "gsm"],
+        }))
+    }
+
+    /// 飞行模式状态，供开关回显。
+    pub async fn airplane_status(&self) -> AppResult<Value> {
+        Ok(self
+            .cfg_get("network.airplane", json!({"enabled": false}))
+            .await?)
+    }
+
+    /// SIM 卡槽。
+    ///
+    /// 本机 oFono 以 `OFONO_RIL_NUM_SIM_SLOTS=1` 启动（单卡），卡槽固定为 1，
+    /// 不做任何切换动作，也不触发 Modem 重枚举 —— 误切卡槽会让已注册的
+    /// Modem 掉线，需要重启 ofonod 才能恢复。
     pub async fn switch_slot(&self, payload: &Value) -> AppResult<Value> {
-        let slot = payload.get("slot").and_then(|v| v.as_u64()).unwrap_or(0);
-        if !(1..=2).contains(&slot) {
-            return Err(bad_request("SIM 卡槽只能是 1 或 2"));
+        let slot = payload.get("slot").and_then(|v| v.as_u64()).unwrap_or(1);
+        if slot != 1 {
+            return Err(bad_request("本机为单卡配置（NUM_SIM_SLOTS=1），仅支持卡槽 1"));
         }
-        self.cfg_set("modem.sim_slot", json!({"slot": slot})).await?;
-        // 切卡后重新探测 modem 路径，避免沿用旧路径（旧版 bug 修复点）。
-        if let Some(dbus) = &self.dbus {
-            if let Ok(paths) = dbus.ofono_modem_paths().await {
-                self.cfg_set("modem.paths", json!(paths)).await?;
-            }
-        }
-        Ok(self.action_result("switch", true, "SIM 卡槽已切换"))
+        self.cfg_set("modem.sim_slot", json!({"slot": 1})).await?;
+        Ok(self.action_result(
+            "switch",
+            false,
+            "本机为单卡配置，卡槽固定为 1，未执行切换",
+        ))
+    }
+
+    /// 当前卡槽（固定 1）。
+    pub async fn sim_slot(&self) -> AppResult<Value> {
+        Ok(json!({
+            "slot": 1,
+            "slot_count": 1,
+            "switchable": false,
+            "note": "本机以单卡模式运行，不支持切换卡槽",
+        }))
     }
 
     pub async fn airplane_mode(&self, payload: &Value) -> AppResult<Value> {
@@ -241,14 +484,34 @@ impl ModemService {
         if command.len() > 512 || command.chars().any(|c| c.is_control() && c != '\r' && c != '\n') {
             return Err(bad_request("AT 命令非法"));
         }
+        let modem_ready = self.modem_count().await > 0;
         // 命令原文不写入普通日志（报告 8 章）。
         match self
             .at
             .submit(command, AtPriority::Interactive, Duration::from_secs(10))
             .await
         {
-            Ok(text) => Ok(json!({"status": "ok", "result": text})),
-            Err(e) => Ok(self.action_result_with_error("at", &e)),
+            Ok(text) => Ok(json!({
+                "status": "ok",
+                "action": "at",
+                "outcome": "success",
+                "result": text,
+                "device_verified": false,
+                "at_implemented": false,
+                "note": "当前 AT 后端为只读占位实现：返回的是 oFono Modem 属性，未向模组串口下发命令",
+            })),
+            Err(e) => {
+                let (kind, message) = classify_at_error(&e, modem_ready);
+                Ok(json!({
+                    "status": "error",
+                    "action": "at",
+                    "outcome": "failed",
+                    "error_kind": kind,
+                    "device_verified": false,
+                    "at_implemented": false,
+                    "message": message,
+                }))
+            }
         }
     }
 
@@ -334,7 +597,11 @@ impl ModemService {
             "status": "ok",
             "action": action,
             "outcome": if device_verified { "success" } else { "unknown" },
+            // 字段含义是「设备是否确认了该动作」。绝大多数控制动作在本项目中
+            // 只落到配置、由设备侧另行应用，因此恒为 false 是诚实的，
+            // 另用 persisted 表达「配置已写入」。
             "device_verified": false,
+            "persisted": true,
             "note": note,
         })
     }
@@ -351,4 +618,72 @@ impl ModemService {
             "message": e.public_message(),
         })
     }
+}
+
+/// UDX710 平台常见频段。仅在无法从设备读取时作为候选清单使用，
+/// 让「频段锁定」页面至少是可操作的，而不是空白表格。
+const BUILTIN_BANDS: &[(&str, &str, &str)] = &[
+    ("LTE_B1", "B1 · 2100 MHz", "LTE"),
+    ("LTE_B3", "B3 · 1800 MHz", "LTE"),
+    ("LTE_B5", "B5 · 850 MHz", "LTE"),
+    ("LTE_B8", "B8 · 900 MHz", "LTE"),
+    ("LTE_B34", "B34 · 2000 MHz", "LTE"),
+    ("LTE_B38", "B38 · 2600 MHz", "LTE"),
+    ("LTE_B39", "B39 · 1900 MHz", "LTE"),
+    ("LTE_B40", "B40 · 2300 MHz", "LTE"),
+    ("LTE_B41", "B41 · 2500 MHz", "LTE"),
+    ("NR_n1", "n1 · 2100 MHz", "NR"),
+    ("NR_n28", "n28 · 700 MHz", "NR"),
+    ("NR_n41", "n41 · 2500 MHz", "NR"),
+    ("NR_n77", "n77 · 3.3 GHz", "NR"),
+    ("NR_n78", "n78 · 3.5 GHz", "NR"),
+    ("NR_n79", "n79 · 4.9 GHz", "NR"),
+];
+
+/// AT 失败原因分级：把「模组不存在」「总线超时」「通道未实现」分开，
+/// 前端才能给出可操作的提示，而不是统一的「服务暂时不可用」。
+fn classify_at_error(e: &AppError, modem_ready: bool) -> (&'static str, String) {
+    if !modem_ready {
+        return (
+            "modem_absent",
+            "模组未就绪：oFono 未托管 Modem 对象，无法下发 AT 命令".to_string(),
+        );
+    }
+    match e {
+        AppError::Timeout(_) => (
+            "dbus_timeout",
+            format!("AT 通道超时：{}", e.public_message()),
+        ),
+        _ => ("at_unavailable", format!("AT 通道不可用：{}", e.public_message())),
+    }
+}
+
+fn pick_value<'a>(v: &'a Value, keys: &[&str]) -> Option<&'a Value> {
+    keys.iter()
+        .find_map(|k| v.get(*k))
+        .filter(|x| !x.is_null())
+}
+
+fn pick_str(v: &Value, keys: &[&str]) -> Option<String> {
+    pick_value(v, keys).and_then(|x| match x {
+        Value::String(s) if !s.is_empty() => Some(s.clone()),
+        Value::Number(n) => Some(n.to_string()),
+        _ => None,
+    })
+}
+
+fn pick_u64(v: &Value, keys: &[&str]) -> Option<u64> {
+    pick_value(v, keys).and_then(|x| {
+        x.as_u64()
+            .or_else(|| x.as_i64().map(|i| i.max(0) as u64))
+            .or_else(|| x.as_str().and_then(|s| s.parse().ok()))
+    })
+}
+
+fn pick_i64(v: &Value, keys: &[&str]) -> Option<i64> {
+    pick_value(v, keys).and_then(|x| {
+        x.as_i64()
+            .or_else(|| x.as_u64().map(|u| u as i64))
+            .or_else(|| x.as_str().and_then(|s| s.parse().ok()))
+    })
 }
