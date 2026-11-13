@@ -12,7 +12,7 @@ export function render(container, context) {
   const grid = el('div', { class: 'page-grid' });
   container.appendChild(grid);
 
-  const statusCard = ctx.card({ title: '电池状态', subtitle: '/api/charge/config', span: 5, icon: 'battery' });
+  const statusCard = ctx.card({ title: '电池状态', subtitle: '实时电量、电压与健康状态', span: 5, icon: 'battery' });
   const rows = {};
   const kv = (label, key) => {
     const v = el('span', { class: 'kv__v', text: '—' });

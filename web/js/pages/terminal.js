@@ -92,7 +92,7 @@ export function render(container, context) {
   grid.appendChild(banner);
 
   // 交互式终端
-  const termCard = ctx.card({ title: '交互式终端', subtitle: '/api/terminal/ws', span: 12, icon: 'terminal' });
+  const termCard = ctx.card({ title: '交互式终端', subtitle: '实时安全 Shell 会话', span: 12, icon: 'terminal' });
   statusDot = el('i', { class: 'dot dot--warning' });
   statusText = el('span', { text: ctx.t('app.connecting') });
   const statusLight = el('span', { class: 'terminal__status' }, statusDot, statusText);
@@ -163,7 +163,7 @@ export function render(container, context) {
     withToken: true,
     onOpen: () => {
       setStatus('ok', ctx.t('app.online'));
-      appendSystem('已连接到 /api/terminal/ws');
+      appendSystem('终端会话已就绪');
       sendResize();
       input.focus();
     },
@@ -184,8 +184,14 @@ export function render(container, context) {
   socket.connect();
   ctx.on(window, 'resize', sendResize);
 
-  // 一次性命令（POST /api/shell）
-  const shellCard = ctx.card({ title: '单次命令', subtitle: 'POST /api/shell · 一次性执行', span: 12, icon: 'code' });
+  // 一次性命令（可选折叠卡片）
+  const shellCard = (ctx.collapsibleCard || ctx.card)({
+    title: '单次命令快速执行',
+    subtitle: '独立进程即时诊断执行',
+    span: 12,
+    icon: 'code',
+    badge: '点击展开'
+  });
   const shellInput = el('input', { class: 'input', placeholder: '例如：uname -a', style: { flex: '1' } });
   const shellOut = el('pre', {
     class: 'mono',

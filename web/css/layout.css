@@ -1,157 +1,252 @@
 /**
- * layout.css —— 应用外壳、侧边栏、顶部栏、页面网格与响应式。
- * .page-grid 为 12 列网格；<=760px 时切换为单列。
+ * layout.css —— 沉浸式白色毛玻璃顶部悬浮玻璃岛主导航、全宽工作区、12 列响应式网格与移动端底部岛式导航。
+ * 摒弃传统侧边栏，采用沉浸式宽屏岛式导航设计。
  */
 .app-shell {
   display: flex;
-  min-height: 100vh;
-}
-
-/* ============ 侧边栏 ============ */
-.sidebar {
-  width: var(--sidebar-w);
-  flex: 0 0 var(--sidebar-w);
-  position: sticky;
-  top: 0;
-  height: 100vh;
-  display: flex;
   flex-direction: column;
-  background: var(--sidebar-bg);
-  border-right: 1px solid var(--border);
-  z-index: 40;
-  transition: width 0.25s ease, flex-basis 0.25s ease, transform 0.25s ease;
-  overflow: hidden;
-}
-
-.brand {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-4);
-  border-bottom: 1px solid var(--border);
-  min-height: 72px;
-}
-.brand__logo {
-  width: 38px;
-  height: 38px;
-  flex-shrink: 0;
-  border-radius: 12px;
-  background: linear-gradient(135deg, var(--primary), var(--info));
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.brand__logo .icon { width: 20px; height: 20px; color: #fff; }
-.brand__text { overflow: hidden; }
-.brand__text h1 { font-size: 16px; font-weight: 700; white-space: nowrap; }
-.brand__text p { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
-
-.nav { flex: 1; overflow-y: auto; padding: var(--space-3); }
-.nav__group-title {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-muted);
-  padding: var(--space-3) var(--space-2) var(--space-1);
-  white-space: nowrap;
-}
-.nav__item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
+  min-height: 100vh;
+  min-height: 100dvh;
   width: 100%;
-  padding: var(--space-2) var(--space-3);
-  margin-bottom: 2px;
-  border: 0;
-  background: transparent;
-  border-radius: var(--radius-sm);
-  color: var(--text-muted);
-  text-align: left;
-  transition: background 0.15s ease, color 0.15s ease;
+  position: relative;
 }
-.nav__item:hover { background: var(--surface-muted); color: var(--text); }
-.nav__item.is-active {
-  background: color-mix(in srgb, var(--primary) 12%, var(--surface));
-  color: var(--primary);
-  font-weight: 600;
-}
-.nav__icon {
-  width: 32px;
-  height: 32px;
-  flex-shrink: 0;
-  border-radius: var(--radius-sm);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--surface-muted);
-}
-.nav__item.is-active .nav__icon {
-  background: var(--primary);
-  color: var(--primary-contrast);
-}
-.nav__label { font-size: 13.5px; white-space: nowrap; }
 
-.sidebar__foot {
-  padding: var(--space-3);
-  border-top: 1px solid var(--border);
-}
-.sidebar__toggle {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  padding: var(--space-2);
-  border: 1px solid var(--border);
-  background: var(--surface-muted);
-  border-radius: var(--radius-sm);
-  color: var(--text-muted);
-}
-.sidebar__toggle:hover { color: var(--text); }
-
-/* 折叠态（桌面） */
-.sidebar.is-collapsed { width: 72px; flex-basis: 72px; }
-.sidebar.is-collapsed .brand__text,
-.sidebar.is-collapsed .nav__label,
-.sidebar.is-collapsed .nav__group-title,
-.sidebar.is-collapsed .sidebar__toggle span { display: none; }
-.sidebar.is-collapsed .brand { justify-content: center; padding: var(--space-3); }
-.sidebar.is-collapsed .nav__item { justify-content: center; padding: var(--space-2); }
-.sidebar.is-collapsed .nav__group-title { padding: var(--space-2) 0; }
-.sidebar.is-collapsed .nav__group-title::after { content: "···"; }
-
-/* ============ 主区 ============ */
-.main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-
-.topbar {
+/* ============ 顶部悬浮玻璃岛式主导航栏 (Header Dock) ============ */
+.header-dock {
   position: sticky;
   top: 0;
-  z-index: 30;
+  z-index: 50;
   padding: var(--space-3) var(--space-4);
+  width: 100%;
 }
-.topbar__inner {
+
+.header-dock__inner {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
+  padding: 8px 18px;
   background: var(--topbar-bg);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-  padding: var(--space-2) var(--space-4);
-  box-shadow: var(--shadow);
-  min-height: 56px;
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  backdrop-filter: blur(28px) saturate(180%);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow-lg);
+  border-radius: var(--radius-xl);
+  max-width: 1600px;
+  margin: 0 auto;
+  position: relative;
+  transition: all 0.25s ease;
 }
-.topbar__left { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
-.topbar__title { font-size: 17px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.topbar__subtitle { font-size: 11px; color: var(--text-muted); }
-.topbar__actions { display: flex; align-items: center; gap: var(--space-2); flex-shrink: 0; }
-.topbar__menu { display: none; }
-.topbar__clock { font-size: 11px; color: var(--text-muted); text-align: right; }
 
-.page { padding: 0 var(--space-4) var(--space-6); flex: 1; min-width: 0; }
+/* 品牌区域 */
+.dock-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  cursor: pointer;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.dock-brand__logo {
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dock-brand__logo .brand__live {
+  width: 38px;
+  height: 38px;
+  display: block;
+}
+
+.dock-brand__text {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.dock-brand__title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dock-brand__title-row h1 {
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  background: linear-gradient(120deg, var(--text) 0%, var(--primary) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.dock-brand__badge {
+  font-size: 9.5px;
+  font-weight: 800;
+  padding: 1px 5px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #2563eb, #0891b2);
+  color: #ffffff;
+  letter-spacing: 0.04em;
+}
+
+.dock-brand__text p {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  font-weight: 500;
+  line-height: 1.1;
+}
+
+/* 桌面端水平主导航药丸栏 (Horizontal Nav Dock) */
+.dock-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.45);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border-subtle);
+  border-radius: 9999px;
+  padding: 4px;
+  box-shadow: var(--glass-shadow-inset);
+  max-width: 100%;
+}
+
+[data-theme="dark"] .dock-nav {
+  background: rgba(15, 23, 42, 0.55);
+}
+
+.dock-nav-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 13px;
+  border-radius: 9999px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.dock-nav-item .icon {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+.dock-nav-item:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.7);
+  transform: translateY(-1px);
+}
+
+[data-theme="dark"] .dock-nav-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.dock-nav-item.is-active {
+  color: #ffffff;
+  background: var(--primary);
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.dock-nav-item.is-active .icon {
+  color: #ffffff;
+}
+
+/* 更多应用高亮徽标药丸 */
+.dock-nav-item--apps {
+  color: var(--primary);
+  background: rgba(37, 99, 235, 0.08);
+}
+
+.dock-nav-item--apps:hover {
+  background: rgba(37, 99, 235, 0.16);
+}
+
+/* 右侧控制区 */
+.dock-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.dock-status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid var(--glass-border-subtle);
+  color: var(--text);
+  white-space: nowrap;
+}
+
+[data-theme="dark"] .dock-status-chip {
+  background: rgba(15, 23, 42, 0.5);
+}
+
+.dock-actions-btns {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dock-clock {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-family: var(--mono);
+  padding: 4px 8px;
+  border-left: 1px solid var(--glass-border-subtle);
+  white-space: nowrap;
+}
+
+.dock-menu-toggle {
+  display: none;
+}
+
+/* ============ 主页面容器 ============ */
+.page-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 1600px;
+  margin: 0 auto;
+  min-width: 0;
+}
+
+.page-content {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+}
+
+.page {
+  padding: var(--space-2) var(--space-4) var(--space-6);
+  flex: 1;
+  min-width: 0;
+}
+
 .page__head {
   display: flex;
   align-items: flex-end;
@@ -160,15 +255,27 @@
   margin-bottom: var(--space-4);
   flex-wrap: wrap;
 }
-.page__title { font-size: 20px; font-weight: 700; }
-.page__desc { font-size: 12.5px; color: var(--text-muted); }
 
-/* ============ 12 列页面网格 ============ */
+.page__title {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  color: var(--text);
+}
+
+.page__desc {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 3px;
+}
+
+/* ============ 12 列响应式网格 ============ */
 .page-grid {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
   gap: var(--space-4);
 }
+
 .col-span-1 { grid-column: span 1; }
 .col-span-2 { grid-column: span 2; }
 .col-span-3 { grid-column: span 3; }
@@ -182,65 +289,141 @@
 .col-span-11 { grid-column: span 11; }
 .col-span-12 { grid-column: span 12; }
 
-/* 登录页：覆盖整个视口的遮罩层（高于侧边栏/顶部栏） */
-.login-screen {
+/* ============ 移动端悬浮毛玻璃底部导航条 (Bottom Nav) ============ */
+.bottom-nav {
   position: fixed;
-  inset: 0;
-  z-index: 100;
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  left: 14px;
+  right: 14px;
+  height: 60px;
+  background: var(--topbar-bg);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  backdrop-filter: blur(28px) saturate(180%);
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 12px 36px rgba(15, 23, 42, 0.18);
+  border-radius: 30px;
+  display: none;
+  align-items: center;
+  justify-content: space-around;
+  padding: 0 8px;
+  z-index: 45;
+}
+
+.bottom-nav__item {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 3px;
+  padding: 6px 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 16px;
+  flex: 1;
+  min-height: 44px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.bottom-nav__item .icon {
+  width: 20px;
+  height: 20px;
+  transition: transform 0.2s ease;
+}
+
+.bottom-nav__item span {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.bottom-nav__item.is-active {
+  color: var(--primary);
+  background: rgba(37, 99, 235, 0.1);
+}
+
+.bottom-nav__item.is-active .icon {
+  transform: translateY(-2px);
+}
+
+/* ============ 全功能全景弹窗 / 目录卡片 (Apps Catalog) ============ */
+.apps-catalog-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--space-4);
+  padding: var(--space-2) 0;
+}
+
+.apps-catalog-card {
+  background: var(--surface);
+  border: 1px solid var(--glass-border-subtle);
+  border-radius: var(--radius-lg);
   padding: var(--space-4);
-  background: radial-gradient(circle at 80% 15%, color-mix(in srgb, var(--info) 25%, transparent), transparent 40%), var(--bg);
-  overflow: auto;
+  box-shadow: var(--glass-shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
 }
 
-.sidebar-backdrop {
-  display: none;
-  position: fixed;
-  inset: 0;
-  z-index: 35;
-  background: rgba(6, 12, 22, 0.5);
+.apps-catalog-title {
+  font-size: 12.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--glass-border-subtle);
 }
 
-/* ============ 响应式 ============ */
-@media (max-width: 760px) {
-  /* 网格单列 */
-  .page-grid { grid-template-columns: 1fr; }
-  .col-span-1, .col-span-2, .col-span-3, .col-span-4,
-  .col-span-5, .col-span-6, .col-span-7, .col-span-8,
-  .col-span-9, .col-span-10, .col-span-11, .col-span-12 {
-    grid-column: 1 / -1;
-  }
-
-  .sidebar {
-    position: fixed;
-    left: 0;
-    top: 0;
-    height: 100vh;
-    width: 264px;
-    flex-basis: 264px;
-    transform: translateX(-100%);
-    box-shadow: var(--shadow-lg);
-  }
-  .app-shell.sidebar-open .sidebar { transform: translateX(0); }
-  .app-shell.sidebar-open .sidebar-backdrop { display: block; }
-  /* 移动端不使用折叠态 */
-  .sidebar.is-collapsed { width: 264px; flex-basis: 264px; }
-  .sidebar.is-collapsed .brand__text,
-  .sidebar.is-collapsed .nav__label,
-  .sidebar.is-collapsed .nav__group-title { display: block; }
-  .sidebar.is-collapsed .nav__item { justify-content: flex-start; padding: var(--space-2) var(--space-3); }
-
-  .topbar__menu { display: inline-flex; }
-  .topbar__clock { display: none; }
-  .topbar__subtitle { display: none; }
-  .topbar__title { font-size: 15px; }
-  .page { padding: 0 var(--space-3) var(--space-5); }
+.apps-catalog-list {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
 }
 
-@media (min-width: 761px) and (max-width: 1100px) {
-  .page-grid { gap: var(--space-3); }
-  .col-span-3, .col-span-4 { grid-column: span 6; }
-  .col-span-2 { grid-column: span 4; }
+.apps-catalog-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid var(--glass-border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+[data-theme="dark"] .apps-catalog-btn {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.apps-catalog-btn:hover {
+  background: rgba(255, 255, 255, 0.85);
+  border-color: var(--primary);
+  transform: translateY(-1px);
+  box-shadow: var(--glass-shadow-sm);
+}
+
+[data-theme="dark"] .apps-catalog-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.apps-catalog-btn.is-active {
+  background: rgba(37, 99, 235, 0.12);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.apps-catalog-btn .icon {
+  width: 17px;
+  height: 17px;
+  color: var(--primary);
+  flex-shrink: 0;
 }

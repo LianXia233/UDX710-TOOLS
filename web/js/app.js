@@ -155,70 +155,145 @@ function toggleTheme() {
   applyTheme();
 }
 
-// ---- 侧边栏 / 顶部栏 ----
-let shellEl;
-let sidebarEl;
+// ---- 悬浮玻璃岛主导航 & 移动端导航 ----
+const PRIMARY_DOCK_ITEMS = [
+  { id: 'dashboard', label: 'nav.dashboard', icon: 'gauge' },
+  { id: 'modem', label: 'nav.modem', icon: 'signal' },
+  { id: 'traffic', label: 'nav.traffic', icon: 'chart' },
+  { id: 'sms', label: 'nav.sms', icon: 'mail' },
+  { id: 'network', label: 'nav.network', icon: 'network' },
+  { id: 'system', label: 'nav.system', icon: 'cpu' },
+  { id: '__more__', label: 'app.menu', icon: 'menu' }
+];
 
-function closeMobileSidebar() {
-  shellEl.classList.remove('sidebar-open');
-}
-
-function iconBtn(iconName, title, onClick, id) {
-  const b = dom.el('button', {
-    type: 'button', class: 'icon-btn', title, id: id || ''
-  }, dom.icon(iconName));
-  b.addEventListener('click', onClick);
-  return b;
-}
+const BOTTOM_NAV_ITEMS = [
+  { id: 'dashboard', label: 'nav.dashboard', icon: 'gauge' },
+  { id: 'modem', label: 'nav.modem', icon: 'signal' },
+  { id: 'traffic', label: 'nav.traffic', icon: 'chart' },
+  { id: 'sms', label: 'nav.sms', icon: 'mail' },
+  { id: '__more__', label: 'app.menu', icon: 'menu' }
+];
 
 function setActiveNav(id) {
-  for (const item of document.querySelectorAll('#nav .nav__item')) {
+  for (const item of document.querySelectorAll('#dock-nav .dock-nav-item')) {
+    item.classList.toggle('is-active', item.getAttribute('data-id') === id);
+  }
+  for (const item of document.querySelectorAll('#bottom-nav .bottom-nav__item')) {
     item.classList.toggle('is-active', item.getAttribute('data-id') === id);
   }
 }
 
-function buildNav() {
-  const nav = document.getElementById('nav');
-  nav.replaceChildren();
+let activeCatalogModal = null;
+
+function openAppsCatalog() {
+  if (activeCatalogModal) {
+    try { activeCatalogModal.close(); } catch (e) {}
+    activeCatalogModal = null;
+  }
+
+  const isMobile = window.innerWidth <= 768;
+  const currentRoute = (router.currentRoute() || {}).id;
+
+  // 构建分类卡片全景网格
+  const grid = dom.el('div', { class: 'apps-catalog-grid' });
   for (const group of NAV) {
-    nav.appendChild(dom.el('div', { class: 'nav__group-title', text: i18n.t(group.group) }));
+    const card = dom.el('div', { class: 'apps-catalog-card' });
+    const firstIcon = group.items[0]?.icon || 'settings';
+    const title = dom.el('div', { class: 'apps-catalog-title' },
+      dom.icon(firstIcon),
+      dom.el('span', { text: i18n.t(group.group) })
+    );
+    const list = dom.el('div', { class: 'apps-catalog-list' });
+
     for (const item of group.items) {
       const btn = dom.el('button', {
-        type: 'button', class: 'nav__item', 'data-id': item.id,
+        type: 'button',
+        class: `apps-catalog-btn ${item.id === currentRoute ? 'is-active' : ''}`,
+        'data-id': item.id,
         title: i18n.t(item.label)
       },
-      dom.el('span', { class: 'nav__icon' }, dom.icon(item.icon)),
-      dom.el('span', { class: 'nav__label', text: i18n.t(item.label) }));
+        dom.icon(item.icon),
+        dom.el('span', { text: i18n.t(item.label) })
+      );
       btn.addEventListener('click', () => {
         router.navigate(item.id);
-        closeMobileSidebar();
+        if (activeCatalogModal) {
+          activeCatalogModal.close();
+          activeCatalogModal = null;
+        }
       });
-      nav.appendChild(btn);
+      list.appendChild(btn);
     }
+
+    card.append(title, list);
+    grid.appendChild(card);
+  }
+
+  activeCatalogModal = openModal({
+    title: '5G-MIFI 功能全景中心',
+    variant: isMobile ? 'bottom-sheet' : 'center',
+    content: grid,
+    body: grid,
+    onClose: () => { activeCatalogModal = null; }
+  });
+}
+
+function buildDockNav() {
+  const container = document.getElementById('dock-nav');
+  if (!container) return;
+  container.replaceChildren();
+
+  for (const item of PRIMARY_DOCK_ITEMS) {
+    const isMore = item.id === '__more__';
+    const btn = dom.el('button', {
+      type: 'button',
+      class: `dock-nav-item ${isMore ? 'dock-nav-item--apps' : ''}`,
+      'data-id': item.id,
+      title: i18n.t(item.label)
+    },
+      dom.icon(item.icon),
+      dom.el('span', { text: isMore ? '全部功能' : i18n.t(item.label) })
+    );
+    btn.addEventListener('click', () => {
+      if (isMore) {
+        openAppsCatalog();
+      } else {
+        router.navigate(item.id);
+      }
+    });
+    container.appendChild(btn);
   }
   const current = router.currentRoute();
   if (current) setActiveNav(current.id);
 }
 
-function buildSidebarFoot() {
-  const foot = document.getElementById('sidebar-foot');
-  foot.replaceChildren();
-  const btn = dom.el('button', {
-    type: 'button', class: 'sidebar__toggle', title: i18n.t('app.collapse')
-  }, dom.icon('chevron-left'), dom.el('span', { text: i18n.t('app.collapse') }));
-  btn.addEventListener('click', () => {
-    const collapsed = sidebarEl.classList.toggle('is-collapsed');
-    const iconEl = btn.querySelector('.icon');
-    if (iconEl) {
-      iconEl.replaceChildren();
-      const use = document.createElementNS(dom.SVG_NS, 'use');
-      use.setAttribute('href', `/icons/sprite.svg#icon-${collapsed ? 'chevron-right' : 'chevron-left'}`);
-      iconEl.appendChild(use);
-    }
-    const label = btn.querySelector('span');
-    if (label) label.textContent = collapsed ? i18n.t('app.expand') : i18n.t('app.collapse');
-  });
-  foot.appendChild(btn);
+function buildBottomNav() {
+  const container = document.getElementById('bottom-nav');
+  if (!container) return;
+  container.replaceChildren();
+
+  for (const item of BOTTOM_NAV_ITEMS) {
+    const isMore = item.id === '__more__';
+    const btn = dom.el('button', {
+      type: 'button',
+      class: 'bottom-nav__item',
+      'data-id': item.id,
+      title: i18n.t(item.label)
+    },
+      dom.icon(item.icon),
+      dom.el('span', { text: isMore ? '全部' : i18n.t(item.label) })
+    );
+    btn.addEventListener('click', () => {
+      if (isMore) {
+        openAppsCatalog();
+      } else {
+        router.navigate(item.id);
+      }
+    });
+    container.appendChild(btn);
+  }
+  const current = router.currentRoute();
+  if (current) setActiveNav(current.id);
 }
 
 function setConnection(status) {
@@ -240,43 +315,18 @@ function setConnection(status) {
   store.set('connection', status);
 }
 
-function buildTopbar() {
-  const actions = document.getElementById('topbar-actions');
-  actions.replaceChildren();
-  const conn = dom.el('span', { class: 'topbar__status status-light' },
-    dom.el('i', { class: 'dot dot--muted', id: 'conn-dot' }),
-    dom.el('span', { id: 'conn-label', text: i18n.t('app.connecting') }));
-
-  const langBtn = iconBtn('globe', i18n.t('app.language'), () => i18n.toggleLocale());
-  const themeBtn = iconBtn('moon', i18n.t('app.theme'), toggleTheme, 'theme-btn');
-  const refreshBtn = iconBtn('refresh', i18n.t('app.refresh'), () => router.reload());
-  const logoutBtn = iconBtn('log-out', i18n.t('app.logout'), handleLogout);
-  const clock = dom.el('div', { class: 'topbar__clock' },
-    dom.el('div', { text: i18n.t('common.time') }),
-    dom.el('div', { id: 'clock-time', text: '--:--:--' }));
-
-  actions.append(conn, langBtn, themeBtn, refreshBtn, logoutBtn, clock);
-  applyTheme();
-  setConnection(realtime.getStatus());
-}
-
 function updateClock() {
   const node = document.getElementById('clock-time');
   if (node) node.textContent = new Date().toLocaleTimeString();
 }
 
-function setTopbarTitle(id) {
-  const titleEl = document.getElementById('topbar-title');
-  const subEl = document.getElementById('topbar-subtitle');
-  const label = NAV_LABELS[id];
-  if (titleEl) titleEl.textContent = label ? i18n.t(label) : (id === 'login' ? i18n.t('login.title') : id);
-  if (subEl) subEl.textContent = i18n.t('app.subtitle');
-}
-
 function applyStaticI18n() {
-  document.getElementById('brand-title').textContent = i18n.t('app.title');
-  document.getElementById('brand-subtitle').textContent = i18n.t('app.subtitle');
-  document.getElementById('menu-btn').setAttribute('aria-label', i18n.t('app.menu'));
+  const title = document.getElementById('brand-title');
+  const subtitle = document.getElementById('brand-subtitle');
+  const menuBtn = document.getElementById('menu-btn');
+  if (title) title.textContent = i18n.t('app.title');
+  if (subtitle) subtitle.textContent = i18n.t('app.subtitle');
+  if (menuBtn) menuBtn.setAttribute('aria-label', i18n.t('app.menu'));
   document.title = `${i18n.t('app.title')} · ${i18n.t('app.subtitle')}`;
 }
 
@@ -342,36 +392,52 @@ function registerPluginActions() {
 
 // ---- 启动 ----
 async function boot() {
-  shellEl = document.getElementById('shell');
-  sidebarEl = document.getElementById('sidebar');
+  const headerDockEl = document.getElementById('header-dock');
+  const bottomNavEl = document.getElementById('bottom-nav');
 
   applyTheme();
   applyStaticI18n();
-  buildNav();
-  buildSidebarFoot();
-  buildTopbar();
+  buildDockNav();
+  buildBottomNav();
   updateClock();
   setInterval(updateClock, 1000);
   registerPluginActions();
 
-  document.getElementById('menu-btn').addEventListener('click', () => {
-    shellEl.classList.toggle('sidebar-open');
+  // 顶部悬浮岛按键绑定
+  document.getElementById('dock-brand')?.addEventListener('click', () => {
+    if (auth.isAuthenticated()) router.navigate('dashboard');
   });
-  document.getElementById('sidebar-backdrop').addEventListener('click', closeMobileSidebar);
+  document.getElementById('menu-btn')?.addEventListener('click', () => {
+    openAppsCatalog();
+  });
+  document.getElementById('lang-btn')?.addEventListener('click', () => {
+    i18n.toggleLocale();
+  });
+  document.getElementById('theme-btn')?.addEventListener('click', () => {
+    toggleTheme();
+  });
+  document.getElementById('refresh-btn')?.addEventListener('click', () => {
+    router.reload();
+  });
+  document.getElementById('logout-btn')?.addEventListener('click', () => {
+    handleLogout();
+  });
 
-  // 实时状态连接状态 -> 顶部状态灯
+  // 实时状态连接状态 -> 状态指示灯
   realtime.onStatus(setConnection);
+  setConnection(realtime.getStatus());
+
   // 登录/登出事件 -> 建立/关闭实时连接
   events.on('auth:login', () => realtime.connect());
   events.on('auth:logout', () => realtime.close());
   // 401 -> 跳转登录
   window.addEventListener('auth-required', handleAuthRequired);
+
   // 语言切换 -> 重建静态文案并刷新当前页面
   i18n.onChange(() => {
     applyStaticI18n();
-    buildNav();
-    buildTopbar();
-    setTopbarTitle((router.currentRoute() || {}).id || 'dashboard');
+    buildDockNav();
+    buildBottomNav();
     router.reload();
   });
 
@@ -382,11 +448,16 @@ async function boot() {
     guard,
     contextFactory: makeContext,
     onChange(id) {
-      setActiveNav(id);
-      setTopbarTitle(id);
+      if (id === 'login') {
+        headerDockEl?.classList.add('is-hidden');
+        bottomNavEl?.classList.add('is-hidden');
+      } else {
+        headerDockEl?.classList.remove('is-hidden');
+        bottomNavEl?.classList.remove('is-hidden');
+        setActiveNav(id);
+      }
     },
     onError(err, id) {
-      // 页面渲染异常不应导致整个应用崩溃
       console.error(`[app] 页面 ${id} 渲染失败`, err);
       toast.error(i18n.t('common.requestFailed'));
     }

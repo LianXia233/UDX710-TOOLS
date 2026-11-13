@@ -4,14 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
-<!-- CSP：仅同源资源，禁止 eval 类指令与内联脚本，静态资源由 Rust 内嵌托管 -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+<!-- CSP：仅同源资源与 WebSocket，禁止 eval 类指令与内联脚本，静态资源由 Rust 内嵌托管 -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self' ws: wss:; object-src 'none'; base-uri 'self'; form-action 'self'">
 <title>5G-MIFI 管理中心</title>
 <link rel="icon" type="image/svg+xml" href="/icons/brand-live.svg">
 <link rel="stylesheet" href="/css/tokens.css">
 <link rel="stylesheet" href="/css/layout.css">
 <link rel="stylesheet" href="/css/components.css">
-<!-- 白色毛玻璃 + 动态 SVG 背景 -->
+<!-- 白色毛玻璃 + 动态 SVG 背景与仪表盘 -->
 <link rel="stylesheet" href="/css/glass.css">
 <!-- 三种弹窗形态（Centered / Bottom Sheet / Right Side Sheet） -->
 <link rel="stylesheet" href="/css/sheets.css">
@@ -20,41 +20,69 @@
 </head>
 <body>
 <div class="app-shell" id="shell">
-  <!-- 侧边栏容器：导航项由 app.js 挂载 -->
-  <aside class="sidebar" id="sidebar" aria-label="主导航">
-    <div class="brand">
-      <span class="brand__logo"><img class="brand__live" src="/icons/brand-live.svg" alt="5G-MIFI 动态标识"></span>
-      <div class="brand__text">
-        <h1 id="brand-title">5G-MIFI</h1>
-        <p id="brand-subtitle">管理中心</p>
-      </div>
-    </div>
-    <nav class="nav" id="nav" aria-label="页面导航"></nav>
-    <div class="sidebar__foot" id="sidebar-foot"></div>
-  </aside>
-
-  <!-- 主内容区 -->
-  <div class="main">
-    <header class="topbar" id="topbar">
-      <div class="topbar__inner">
-        <div class="topbar__left">
-          <button type="button" class="icon-btn topbar__menu" id="menu-btn" aria-label="展开菜单">
-            <svg class="icon"><use href="/icons/sprite.svg#icon-menu"/></svg>
-          </button>
-          <div>
-            <h2 class="topbar__title" id="topbar-title">系统监控</h2>
-            <p class="topbar__subtitle" id="topbar-subtitle">实时监控设备状态</p>
+  <!-- 顶部悬浮玻璃岛式主导航栏（无侧边栏设计，沉浸式宽屏布局） -->
+  <header class="header-dock" id="header-dock">
+    <div class="header-dock__inner">
+      <!-- 品牌区 -->
+      <div class="dock-brand" id="dock-brand">
+        <span class="dock-brand__logo">
+          <img class="brand__live" src="/icons/brand-live.svg" alt="5G-MIFI 动态标识">
+        </span>
+        <div class="dock-brand__text">
+          <div class="dock-brand__title-row">
+            <h1 id="brand-title">5G-MIFI</h1>
+            <span class="dock-brand__badge">PRO</span>
           </div>
+          <p id="brand-subtitle">管理中心</p>
         </div>
-        <div class="topbar__actions" id="topbar-actions"></div>
       </div>
-    </header>
-    <div class="page">
-      <main id="app" role="main"></main>
-    </div>
-  </div>
 
-  <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+      <!-- 桌面端水平分类与导航药丸 (Horizontal Nav Pills) -->
+      <nav class="dock-nav" id="dock-nav" aria-label="核心功能导航"></nav>
+
+      <!-- 右侧控制岛 (状态信标、语言、主题、刷新、退出、时钟) -->
+      <div class="dock-actions" id="dock-actions">
+        <!-- 实时连接指示器 -->
+        <div class="dock-status-chip status-light" id="conn-chip" title="实时连接状态">
+          <i class="dot dot--muted" id="conn-dot"></i>
+          <span class="status-light__label" id="conn-label">连接中</span>
+        </div>
+
+        <div class="dock-actions-btns">
+          <button type="button" class="icon-btn" id="lang-btn" title="切换语言">
+            <svg class="icon"><use href="/icons/sprite.svg#icon-globe"/></svg>
+          </button>
+          <button type="button" class="icon-btn" id="theme-btn" title="切换主题">
+            <svg class="icon"><use href="/icons/sprite.svg#icon-moon"/></svg>
+          </button>
+          <button type="button" class="icon-btn" id="refresh-btn" title="刷新页面">
+            <svg class="icon"><use href="/icons/sprite.svg#icon-refresh"/></svg>
+          </button>
+          <button type="button" class="icon-btn" id="logout-btn" title="退出登录">
+            <svg class="icon"><use href="/icons/sprite.svg#icon-log-out"/></svg>
+          </button>
+        </div>
+
+        <!-- 极简数字时钟 -->
+        <div class="dock-clock" id="dock-clock">
+          <span id="clock-time">--:--:--</span>
+        </div>
+
+        <!-- 移动端抽屉菜单触发按钮 -->
+        <button type="button" class="icon-btn dock-menu-toggle" id="menu-btn" aria-label="功能全景菜单">
+          <svg class="icon"><use href="/icons/sprite.svg#icon-menu"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- 页面主工作区 -->
+  <main class="page-container" id="main-container">
+    <div class="page-content" id="app" role="main"></div>
+  </main>
+
+  <!-- 移动端专属悬浮毛玻璃底部导航条 -->
+  <nav class="bottom-nav" id="bottom-nav" aria-label="移动端快速导航"></nav>
 </div>
 
 <!-- 看门狗状态条：界面假死 / 后端失联时由 core/watchdog.js 控制显示 -->

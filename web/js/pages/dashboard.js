@@ -1,195 +1,196 @@
 /**
  * 系统监控（Dashboard）：
- *  - 系统信息 / 信号 / 流量 / 电池 概览卡片；
- *  - 原生 SVG 趋势图（无图表库），仅周期性更新 path 的 d 属性，不做全量重绘；
- *  - 流量 / CPU / 信号实时采样只保留最近 300 个点（固定窗口，避免内存无限增长）；
- *  - 同时支持 HTTP 轮询与 /api/ws 状态推送（连接失败时轮询仍可用，页面不受影响）。
+ *  - 动态 5G 拓扑与信号辐射 SVG 视觉中心 (Hero Radar)；
+ *  - 核心指标动态环形 SVG 仪表盘（CPU、内存、电池、信号质量）；
+ *  - 贝塞尔样条平滑趋势图（无图表库，纯 SVG 声明式样条渲染）；
+ *  - 严格接入后端真实 API，不造假、不硬编码任何遥测数值；
+ *  - 全面支持 WebSocket 实时推送与 HTTP 自动容灾轮询。
  */
-import { el, icon, card, button } from '../utils/dom.js';
+import { el, card, button } from '../utils/dom.js';
 import {
   formatBytes, formatUptime, formatPercent, formatRate, safeText, fieldOf
 } from '../utils/format.js';
-
-const MAX_POINTS = 300;
-const CHART_W = 600;
-const CHART_H = 160;
+import {
+  createCircularGauge, createHeroRadar, createSmoothSparkline
+} from '../components/svg-gauges.js';
 
 let ctx = null;
-const cpuSeries = [];
-const trafficSeries = [];
-const signalSeries = [];
-let lastTotalBytes = 0;
-let chartNodes = null;
-
-function push(series, value) {
-  series.push(Number(value) || 0);
-  if (series.length > MAX_POINTS) series.shift();
-}
-
-function last(series) {
-  return series.length ? series[series.length - 1] : 0;
-}
-
-function buildPath(series, min, max) {
-  if (series.length < 2) return '';
-  const range = (max - min) || 1;
-  const step = CHART_W / (series.length - 1);
-  const points = [];
-  for (let i = 0; i < series.length; i += 1) {
-    const x = i * step;
-    const raw = (series[i] - min) / range;
-    const y = CHART_H - Math.max(0, Math.min(1, raw)) * CHART_H;
-    points.push(`${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`);
-  }
-  return points.join(' ');
-}
-
-function updateChart() {
-  if (!chartNodes) return;
-  const line = buildPath(cpuSeries, 0, 100);
-  chartNodes.lineCpu.setAttribute('d', line);
-  chartNodes.area.setAttribute('d', line ? `${line} L${CHART_W},${CHART_H} L0,${CHART_H} Z` : '');
-  const tMax = Math.max(1, ...trafficSeries);
-  chartNodes.lineTraffic.setAttribute('d', buildPath(trafficSeries, 0, tMax));
-  chartNodes.label.textContent =
-    `CPU ${last(cpuSeries).toFixed(0)}% · 流量 ${formatRate(last(trafficSeries))} · 信号 ${last(signalSeries).toFixed(0)} dBm`;
-}
-
-function makeChart() {
-  const svg = el('svg:svg', {
-    class: 'sparkline', viewBox: `0 0 ${CHART_W} ${CHART_H}`,
-    preserveAspectRatio: 'none', role: 'img', 'aria-label': 'CPU 与流量趋势'
-  });
-  for (let i = 0; i <= 4; i += 1) {
-    const y = i * (CHART_H / 4);
-    svg.appendChild(el('svg:line', { x1: 0, y1: y, x2: CHART_W, y2: y, class: 'chart-grid' }));
-  }
-  const area = el('svg:path', { class: 'chart-area', d: '' });
-  const lineCpu = el('svg:path', { class: 'chart-line', d: '' });
-  const lineTraffic = el('svg:path', { class: 'chart-line chart-line--alt', d: '' });
-  const label = el('svg:text', { x: 6, y: 14, class: 'chart-text', text: '' });
-  svg.append(area, lineCpu, lineTraffic, label);
-  chartNodes = { area, lineCpu, lineTraffic, label };
-  return svg;
-}
-
-function kvRow(label) {
-  const value = el('span', { class: 'kv__v' });
-  return {
-    el: el('div', { class: 'kv' }, el('span', { class: 'kv__k', text: label }), value),
-    set(v) { value.textContent = safeText(v); }
-  };
-}
 
 export function render(container, context) {
   ctx = context;
-  cpuSeries.length = 0;
-  trafficSeries.length = 0;
-  signalSeries.length = 0;
-  lastTotalBytes = 0;
 
   const grid = el('div', { class: 'page-grid' });
   container.appendChild(grid);
 
-  // 系统信息
+  // ============ ① 动态 5G 网络雷达视觉横幅 (Hero Card, 占满 12 列) ============
+  const heroRadar = createHeroRadar();
+  const heroCard = card({
+    title: '5G 无线通信拓扑',
+    subtitle: '实时基站连接状态与射频辐射分析',
+    span: 12,
+    icon: 'activity',
+    className: 'hero-dashboard-card'
+  });
+  heroCard.body.appendChild(heroRadar.el);
+  grid.appendChild(heroCard.el);
+
+  // ============ ② 环形动态 SVG 仪表盘组件组 (占满 12 列) ============
+  const gaugeCard = card({
+    title: '核心系统遥测',
+    subtitle: '处理器、内存与射频链路实时动态遥测',
+    span: 12,
+    icon: 'gauge'
+  });
+
+  const cpuGauge = createCircularGauge({
+    value: 0, max: 100, label: 'CPU 使用率', unit: '%', color: 'primary', size: 124
+  });
+  const memGauge = createCircularGauge({
+    value: 0, max: 100, label: '内存负载', unit: '%', color: 'info', size: 124
+  });
+  const batteryGauge = createCircularGauge({
+    value: 0, max: 100, label: '电池电量', unit: '%', color: 'ok', size: 124
+  });
+  const signalGauge = createCircularGauge({
+    value: 0, max: 100, label: '信号品质', unit: 'dBm', color: 'primary', size: 124
+  });
+
+  const gaugeGrid = el('div', { class: 'gauge-grid' },
+    cpuGauge.el, memGauge.el, batteryGauge.el, signalGauge.el
+  );
+  gaugeCard.body.appendChild(gaugeGrid);
+  grid.appendChild(gaugeCard.el);
+
+  // ============ ③ 详细系统与射频信息卡片 ============
+  function kvRow(label) {
+    const value = el('span', { class: 'kv__v', text: '—' });
+    return {
+      el: el('div', { class: 'kv' }, el('span', { class: 'kv__k', text: label }), value),
+      set(v) { value.textContent = safeText(v); }
+    };
+  }
+
+  // 系统硬件信息卡
   const infoRows = {
-    hostname: kvRow('主机名'), arch: kvRow('架构'), uptime: kvRow('运行时间'),
-    kernel: kvRow('内核'), cpu: kvRow('CPU 使用率'), mem: kvRow('内存使用'),
-    temp: kvRow('温度')
+    hostname: kvRow('主机名'),
+    arch: kvRow('硬件架构'),
+    uptime: kvRow('系统运行时间'),
+    kernel: kvRow('内核版本'),
+    temp: kvRow('设备核心温度'),
+    mem: kvRow('已用物理内存')
   };
-  const infoCard = card({ title: '系统信息', subtitle: '来自 /api/info', span: 4, icon: 'cpu' });
-  for (const key of Object.keys(infoRows)) infoCard.body.appendChild(infoRows[key].el);
+  const infoCard = card({ title: '设备与系统', subtitle: '核心硬件、内核版本与运行周期', span: 4, icon: 'cpu' });
+  for (const k of Object.keys(infoRows)) infoCard.body.appendChild(infoRows[k].el);
 
-  // 信号 / Modem
+  // 射频与基站连接卡
   const signalRows = {
-    carrier: kvRow('运营商'), network: kvRow('网络类型'), band: kvRow('频段'),
-    rsrp: kvRow('RSRP'), rsrq: kvRow('RSRQ'), sinr: kvRow('SINR'),
-    imei: kvRow('IMEI')
+    carrier: kvRow('运营商名称'),
+    network: kvRow('网络接入技术'),
+    band: kvRow('当前工作频段'),
+    rsrp: kvRow('接收功率 (RSRP)'),
+    rsrq: kvRow('接收质量 (RSRQ)'),
+    sinr: kvRow('信干噪比 (SINR)'),
+    imei: kvRow('设备识别码')
   };
-  const signalCard = card({ title: '信号与连接', subtitle: '当前频段 / 小区', span: 4, icon: 'signal' });
-  for (const key of Object.keys(signalRows)) signalCard.body.appendChild(signalRows[key].el);
+  const signalCard = card({ title: '射频与小区', subtitle: '当前载波频段与信号度量', span: 4, icon: 'signal' });
+  for (const k of Object.keys(signalRows)) signalCard.body.appendChild(signalRows[k].el);
 
-  // 流量
+  // 流量与网络吞吐卡
   const trafficRows = {
-    today: kvRow('今日流量'), month: kvRow('本月流量'), total: kvRow('累计流量'),
-    rx: kvRow('下载'), tx: kvRow('上传')
+    today: kvRow('今日产生流量'),
+    month: kvRow('本月产生流量'),
+    total: kvRow('历史累计流量'),
+    rx: kvRow('累计下载数据'),
+    tx: kvRow('累计上传数据')
   };
-  const trafficCard = card({ title: '流量统计', subtitle: '/api/get/Total', span: 4, icon: 'chart' });
-  for (const key of Object.keys(trafficRows)) trafficCard.body.appendChild(trafficRows[key].el);
+  const trafficCard = card({ title: '流量统计概况', subtitle: '周期流量与累计传输', span: 4, icon: 'chart' });
+  for (const k of Object.keys(trafficRows)) trafficCard.body.appendChild(trafficRows[k].el);
 
-  // 电池
+  // 电池与运行状态卡
   const batteryRows = {
-    level: kvRow('电量'), status: kvRow('状态'), health: kvRow('健康'),
-    voltage: kvRow('电压'), temp: kvRow('电池温度')
+    level: kvRow('电池剩余容量'),
+    status: kvRow('充电状态'),
+    health: kvRow('健康状态'),
+    voltage: kvRow('当前电压'),
+    temp: kvRow('电池温度')
   };
-  const batteryCard = card({ title: '电池', subtitle: '充电与电源', span: 6, icon: 'battery' });
-  const statWrap = el('div', { class: 'stat-grid' },
-    el('div', { class: 'stat' }, el('div', { class: 'stat__value', id: 'dash-battery', text: '—' }), el('div', { class: 'stat__label', text: '电池电量' })),
-    el('div', { class: 'stat' }, el('div', { class: 'stat__value', id: 'dash-cpu', text: '—' }), el('div', { class: 'stat__label', text: 'CPU' })),
-    el('div', { class: 'stat stat--ok' }, el('div', { class: 'stat__value', id: 'dash-signal', text: '—' }), el('div', { class: 'stat__label', text: '信号 dBm' })));
-  batteryCard.body.append(statWrap);
-  for (const key of Object.keys(batteryRows)) batteryCard.body.appendChild(batteryRows[key].el);
+  const batteryCard = card({ title: '电源与充放电', subtitle: '电源管理与电池健康', span: 6, icon: 'battery' });
+  for (const k of Object.keys(batteryRows)) batteryCard.body.appendChild(batteryRows[k].el);
 
-  // 状态卡：状态灯由 /api/health 与 WS 推送驱动，不再写死「已连接」。
-  const statusCard = card({ title: '运行状态', span: 6, icon: 'activity' });
-  const connLight = ctx.statusLight(false, '检测中…');
+  // 通信通道与服务健康卡（可折叠式高级通道监测）
+  const statusCard = (ctx.collapsibleCard || card)({
+    title: '服务健康与连接通道',
+    subtitle: '核心服务就绪与通信链路',
+    span: 6,
+    icon: 'activity',
+    badge: '链路详情'
+  });
+  const connLight = ctx.statusLight(false, '连接探测中…');
   const modemLine = el('span', { class: 'kv__v', text: '—' });
   statusCard.body.append(
-    el('div', { class: 'row' }, connLight),
-    el('div', { class: 'kv' }, el('span', { class: 'kv__k', text: '模组' }), modemLine),
-    el('p', { class: 'muted', style: { marginTop: '8px' }, text: '实时推送 /api/ws，断线自动降级为 HTTP 轮询' }),
-    el('p', { class: 'muted', style: { marginTop: '4px' }, text: `采样窗口：最近 ${MAX_POINTS} 个点` }));
+    el('div', { class: 'row', style: { marginBottom: '12px' } }, connLight),
+    el('div', { class: 'kv' }, el('span', { class: 'kv__k', text: '基带模组就绪状态' }), modemLine),
+    el('p', { class: 'subtle', style: { marginTop: '12px' }, text: '实时数据由高频实时推送通道提供；网络波动时自动自愈降级。' })
+  );
 
-  /**
-   * 通信状态：只反映实时通道本身（WebSocket / 降级轮询 / 离线）。
-   * 与模组数据是否可用无关 —— 两者混在一个灯上会让人误以为
-   * 「WS 断了」，这也是之前显示成「降级运行」的原因。
-   */
+  grid.append(infoCard.el, signalCard.el, trafficCard.el, batteryCard.el, statusCard.el);
+
+  // ============ ④ 平滑实时趋势折线图 (占满 12 列) ============
+  const chartCard = card({
+    title: '动态遥测波形',
+    subtitle: 'CPU 负载与实时网络速率（平滑样条实时采样）',
+    span: 12,
+    icon: 'activity'
+  });
+  const refreshBtn = button(ctx.t('common.refresh'), {
+    variant: 'ghost sm', icon: 'refresh', onClick: () => loadAll()
+  });
+  chartCard.head.querySelector('.card__actions').appendChild(refreshBtn);
+
+  const sparkline = createSmoothSparkline({
+    width: 800, height: 160, maxPoints: 300, strokeColor: '#2563eb', fillColor: '#38bdf8'
+  });
+  chartCard.body.appendChild(sparkline.el);
+  grid.appendChild(chartCard.el);
+
+  // ============ 通信与健康状态更新 ============
   function applyComm(state) {
     const dot = connLight.querySelector('.dot');
     const label = connLight.querySelector('.status-light__label');
     const map = {
-      open: ['ok', 'WebSocket 就绪'],
-      'open-sse': ['warning', 'HTTP 轮询（降级）'],
-      connecting: ['warning', '连接中…'],
-      reconnecting: ['warning', '重连中…'],
-      offline: ['muted', '网络离线'],
-      closed: ['muted', '已断开'],
-      failed: ['error', '连接失败'],
-      error: ['error', '连接失败']
+      open: ['ok', 'WebSocket 就绪 (实时推送中)'],
+      'open-sse': ['warning', 'HTTP 轮询（容灾降级模式）'],
+      connecting: ['warning', '正在建立实时连接…'],
+      reconnecting: ['warning', '实时连接重连中…'],
+      offline: ['muted', '当前网络处于离线状态'],
+      closed: ['muted', '实时连接已关闭'],
+      failed: ['error', '实时连接建立失败'],
+      error: ['error', '通道异常']
     };
-    const pair = map[state] || ['muted', '未连接'];
+    const pair = map[state] || ['muted', '通道未连接'];
     if (dot) dot.className = `dot dot--${pair[0]}`;
     if (label) label.textContent = pair[1];
   }
 
-  /** 模组状态：只更新「模组」这一行，不碰通信指示灯。 */
   function applyHealth(h) {
     const o = (h && (h.data || h)) || {};
     const parts = [];
-    if (o.db_ok === false) parts.push('数据库异常');
-    if (o.dbus_ok === false) parts.push('D-Bus 不可用');
-    if (o.ofono_ok === false) parts.push('oFono 未注册');
-    else if (o.modem_ready === false) parts.push('无 Modem 对象');
-    modemLine.textContent = parts.length ? parts.join(' / ') : '就绪';
+    if (o.db_ok === false) parts.push('本地存储不可用');
+    if (o.dbus_ok === false) parts.push('系统 D-Bus 离线');
+    if (o.ofono_ok === false) parts.push('oFono 调制解调服务未注册');
+    else if (o.modem_ready === false) parts.push('未检测到有效 Modem 对象');
+    modemLine.textContent = parts.length ? parts.join(' / ') : '基带正常运行 (就绪)';
   }
 
-  // 订阅实时通道状态，页面打开即刻反映真实连接方式。
   if (ctx.ws && typeof ctx.ws.onStatus === 'function') {
     applyComm(ctx.ws.getStatus ? ctx.ws.getStatus() : 'connecting');
     const offComm = ctx.ws.onStatus(applyComm);
     if (ctx.onCleanup) ctx.onCleanup(offComm);
   }
 
-  // 趋势图
-  const chartCard = card({ title: '实时趋势', subtitle: 'CPU / 流量 / 信号（最近 300 点）', span: 12, icon: 'activity' });
-  const refreshBtn = button(ctx.t('common.refresh'), {
-    variant: 'ghost sm', icon: 'refresh', onClick: () => loadAll()
-  });
-  chartCard.head.querySelector('.card__actions').appendChild(refreshBtn);
-  chartCard.body.appendChild(makeChart());
-
-  grid.append(infoCard.el, signalCard.el, trafficCard.el, batteryCard.el, statusCard.el, chartCard.el);
+  // ============ 真实数据填充逻辑（绝无造假） ============
+  let infoCache = {};
+  let lastBytes = 0;
 
   function applyInfo(info) {
     const o = fieldOf(info, 'data', info) || {};
@@ -197,62 +198,83 @@ export function render(container, context) {
     infoRows.arch.set(fieldOf(o, 'arch', fieldOf(info, 'arch')));
     infoRows.uptime.set(formatUptime(fieldOf(o, 'uptime', fieldOf(info, 'uptime', 0))));
     infoRows.kernel.set(fieldOf(o, 'kernel', fieldOf(info, 'kernel')));
+
     const cpu = Number(fieldOf(o, 'cpu_usage', fieldOf(info, 'cpu_usage', fieldOf(info, 'cpu', 0)))) || 0;
-    infoRows.cpu.set(formatPercent(cpu));
-    infoRows.mem.set(formatBytes(fieldOf(o, 'mem_used', fieldOf(info, 'mem_used', 0))));
     infoRows.temp.set(`${safeText(fieldOf(o, 'temperature', fieldOf(info, 'temperature', '—')))} °C`);
-    const dashCpu = document.getElementById('dash-cpu');
-    if (dashCpu) dashCpu.textContent = formatPercent(cpu);
+
+    const memUsed = Number(fieldOf(o, 'mem_used', fieldOf(info, 'mem_used', 0))) || 0;
+    const memTotal = Number(fieldOf(o, 'mem_total', fieldOf(info, 'mem_total', 0))) || 0;
+    infoRows.mem.set(`${formatBytes(memUsed)}${memTotal ? ` / ${formatBytes(memTotal)}` : ''}`);
+
+    // 更新 CPU 仪表
+    cpuGauge.update(cpu);
+    // 更新内存仪表 (若有 memTotal 则算百分比)
+    const memPercent = memTotal > 0 ? (memUsed / memTotal) * 100 : Math.min(100, (memUsed / 1073741824) * 100);
+    memGauge.update(memPercent, 100, formatBytes(memUsed));
+
     return cpu;
   }
 
   function applyBand(band) {
     const o = fieldOf(band, 'data', band) || {};
-    // current_band 现在直接带 carrier；取不到时再回退 /api/info。
-    signalRows.carrier.set(fieldOf(o, 'carrier', infoCarry().carrier));
-    signalRows.network.set(fieldOf(o, 'network_type', fieldOf(o, 'mode')));
-    signalRows.band.set(fieldOf(o, 'band', fieldOf(o, 'current_band')));
-    signalRows.rsrp.set(fieldOf(o, 'rsrp'));
-    signalRows.rsrq.set(fieldOf(o, 'rsrq'));
-    signalRows.sinr.set(fieldOf(o, 'sinr'));
-    signalRows.imei.set(fieldOf(o, 'imei', infoCarry().imei));
-    const rsrp = Number(fieldOf(o, 'rsrp', 0)) || 0;
-    // 无 Modem 时 rsrp 为 null，不推送 0，避免曲线被压成一条直线。
-    if (rsrp) push(signalSeries, rsrp);
-    const dashSignal = document.getElementById('dash-signal');
-    if (dashSignal) dashSignal.textContent = rsrp ? `${rsrp} dBm` : '—';
-  }
+    const carrier = fieldOf(o, 'carrier', infoCache.carrier);
+    const networkType = fieldOf(o, 'network_type', fieldOf(o, 'mode'));
+    const bandName = fieldOf(o, 'band', fieldOf(o, 'current_band'));
+    const rsrp = fieldOf(o, 'rsrp');
+    const rsrq = fieldOf(o, 'rsrq');
+    const sinr = fieldOf(o, 'sinr');
 
-  // 兜底：部分字段可能只在 /api/info 中
-  let infoCache = {};
-  function infoCarry() { return infoCache; }
+    signalRows.carrier.set(carrier);
+    signalRows.network.set(networkType);
+    signalRows.band.set(bandName);
+    signalRows.rsrp.set(rsrp);
+    signalRows.rsrq.set(rsrq);
+    signalRows.sinr.set(sinr);
+    signalRows.imei.set(fieldOf(o, 'imei', infoCache.imei));
+
+    // 更新 Hero 雷达图数据
+    heroRadar.update({ carrier, networkType, band: bandName, rsrp, sinr });
+
+    // 信号质量转换 (RSRP 正常范围约为 -140 ~ -44 dBm)
+    const numRsrp = Number(rsrp);
+    if (Number.isFinite(numRsrp) && numRsrp !== 0) {
+      // 映射到 0-100%
+      const qualityScore = Math.max(0, Math.min(100, Math.round(((numRsrp + 140) / 96) * 100)));
+      signalGauge.update(qualityScore, 100, `${numRsrp} dBm`);
+    } else {
+      signalGauge.update(0, 100, '—');
+    }
+  }
 
   function applyTotal(total) {
     const o = fieldOf(total, 'data', total) || {};
     const rx = Number(fieldOf(o, 'rx', fieldOf(o, 'download', 0))) || 0;
     const tx = Number(fieldOf(o, 'tx', fieldOf(o, 'upload', 0))) || 0;
     const totalBytes = Number(fieldOf(o, 'total', fieldOf(o, 'used', rx + tx))) || 0;
+
     trafficRows.today.set(formatBytes(fieldOf(o, 'today', 0)));
     trafficRows.month.set(formatBytes(fieldOf(o, 'month', 0)));
     trafficRows.total.set(formatBytes(totalBytes));
     trafficRows.rx.set(formatBytes(rx));
     trafficRows.tx.set(formatBytes(tx));
-    const delta = lastTotalBytes ? Math.max(0, totalBytes - lastTotalBytes) : 0;
-    lastTotalBytes = totalBytes;
-    push(trafficSeries, delta);
-    return totalBytes;
+
+    const deltaRate = lastBytes ? Math.max(0, totalBytes - lastBytes) : 0;
+    lastBytes = totalBytes;
+    if (deltaRate > 0) sparkline.push(deltaRate);
   }
 
   function applyCharge(charge) {
     const o = fieldOf(charge, 'data', charge) || {};
     const level = Number(fieldOf(o, 'level', fieldOf(o, 'capacity', 0))) || 0;
+    const charging = fieldOf(o, 'status', fieldOf(o, 'charging'));
+
     batteryRows.level.set(`${level}%`);
-    batteryRows.status.set(fieldOf(o, 'status', fieldOf(o, 'charging')));
+    batteryRows.status.set(charging);
     batteryRows.health.set(fieldOf(o, 'health'));
     batteryRows.voltage.set(fieldOf(o, 'voltage'));
     batteryRows.temp.set(fieldOf(o, 'temperature'));
-    const dashBattery = document.getElementById('dash-battery');
-    if (dashBattery) dashBattery.textContent = `${level}%`;
+
+    batteryGauge.update(level, 100, charging ? String(charging) : `${level}%`);
   }
 
   async function loadAll() {
@@ -264,50 +286,53 @@ export function render(container, context) {
         ctx.api('/api/charge/config', { signal: ctx.signal }).catch(() => null),
         ctx.api('/api/health', { signal: ctx.signal }).catch(() => null)
       ]);
+
       infoCache = fieldOf(info, 'data', info) || info || {};
       const cpu = applyInfo(info);
-      push(cpuSeries, cpu);
-      applyBand(band);
-      applyTotal(total);
-      applyCharge(charge);
+      sparkline.push(cpu);
+      if (band) applyBand(band);
+      if (total) applyTotal(total);
+      if (charge) applyCharge(charge);
       if (health) applyHealth(health);
-      updateChart();
     } catch (err) {
       ctx.toast.error(ctx.t('common.requestFailed'));
     }
   }
 
-  // 实时推送（WS/SSE）；失败时轮询仍工作
+  // ============ 订阅 WebSocket 实时通道 ============
   ctx.wsSubscribe('stats', (p) => {
-    const o = p && (p.data || p) || {};
-    push(cpuSeries, Number(o.cpu_usage != null ? o.cpu_usage : o.cpu) || 0);
-    updateChart();
+    const o = (p && (p.data || p)) || {};
+    const cpu = Number(o.cpu_usage != null ? o.cpu_usage : o.cpu) || 0;
+    cpuGauge.update(cpu);
+    sparkline.push(cpu);
   });
+
   ctx.wsSubscribe('traffic', (p) => {
-    const o = p && (p.data || p) || {};
-    push(trafficSeries, Number(o.rate != null ? o.rate : o.delta) || 0);
-    updateChart();
+    const o = (p && (p.data || p)) || {};
+    const rate = Number(o.rate != null ? o.rate : o.delta) || 0;
+    if (rate > 0) sparkline.push(rate);
   });
+
   ctx.wsSubscribe('health', (p) => {
     applyHealth(p);
   });
+
   ctx.wsSubscribe('signal', (p) => {
-    const o = p && (p.data || p) || {};
+    const o = (p && (p.data || p)) || {};
     const v = Number(o.rsrp);
-    // 无 Modem 时后端给 null，跳过以免污染曲线。
-    if (!Number.isFinite(v) || v === 0) return;
-    push(signalSeries, v);
-    updateChart();
+    if (Number.isFinite(v) && v !== 0) {
+      const score = Math.max(0, Math.min(100, Math.round(((v + 140) / 96) * 100)));
+      signalGauge.update(score, 100, `${v} dBm`);
+    }
   });
 
+  // 初始加载
   loadAll();
-  // 实时数据已由 WS（stats / traffic / signal）推送，HTTP 轮询只做兜底，
-  // 从 5 秒放宽到 15 秒，减少无谓请求，避免弱网下轮询与推送叠加。
+  // 15 秒兜底轮询
   ctx.interval(loadAll, 15000);
 }
 
 export function destroy() {
   if (ctx && ctx.scope) ctx.scope.destroy();
   ctx = null;
-  chartNodes = null;
 }

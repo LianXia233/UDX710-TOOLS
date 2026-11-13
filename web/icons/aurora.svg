@@ -1,74 +1,115 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice" role="img" aria-label="动态极光背景">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice" role="img" aria-label="动态毛玻璃光晕背景">
   <defs>
-    <radialGradient id="a1" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#8ab6ff" stop-opacity=".55"/>
-      <stop offset="55%" stop-color="#b9d4ff" stop-opacity=".22"/>
+    <!-- 柔和蔚蓝光斑 -->
+    <radialGradient id="auroraBlue" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#93c5fd" stop-opacity="0.45"/>
+      <stop offset="50%" stop-color="#bfdbfe" stop-opacity="0.20"/>
       <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
     </radialGradient>
-    <radialGradient id="a2" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#6fe3d2" stop-opacity=".42"/>
-      <stop offset="60%" stop-color="#c9f4ec" stop-opacity=".16"/>
+
+    <!-- 薄荷碧绿光斑 -->
+    <radialGradient id="auroraMint" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#6ee7b7" stop-opacity="0.35"/>
+      <stop offset="55%" stop-color="#a7f3d0" stop-opacity="0.15"/>
       <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
     </radialGradient>
-    <radialGradient id="a3" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#c9b8ff" stop-opacity=".34"/>
-      <stop offset="70%" stop-color="#e8e0ff" stop-opacity=".12"/>
+
+    <!-- 紫罗兰微光 -->
+    <radialGradient id="auroraViolet" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#c4b5fd" stop-opacity="0.32"/>
+      <stop offset="65%" stop-color="#ddd6fe" stop-opacity="0.12"/>
       <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
     </radialGradient>
-    <linearGradient id="wave1" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#7fa9ff" stop-opacity=".28"/>
-      <stop offset="50%" stop-color="#a8d8ff" stop-opacity=".16"/>
-      <stop offset="100%" stop-color="#78e2d0" stop-opacity=".24"/>
+
+    <!-- 暖粉金微光 -->
+    <radialGradient id="auroraAmber" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#fde68a" stop-opacity="0.26"/>
+      <stop offset="60%" stop-color="#fef08a" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- 底部流线波纹渐变 -->
+    <linearGradient id="waveGrad1" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#60a5fa" stop-opacity="0.22"/>
+      <stop offset="40%" stop-color="#38bdf8" stop-opacity="0.16"/>
+      <stop offset="80%" stop-color="#34d399" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#818cf8" stop-opacity="0.12"/>
     </linearGradient>
-    <linearGradient id="wave2" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#ffffff" stop-opacity=".42"/>
-      <stop offset="100%" stop-color="#bcd8ff" stop-opacity=".20"/>
+
+    <linearGradient id="waveGrad2" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.5"/>
+      <stop offset="50%" stop-color="#bae6fd" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#c7d2fe" stop-opacity="0.20"/>
     </linearGradient>
+
+    <!-- 极光轻微噪点滤镜，营造磨砂毛玻璃质感 -->
+    <filter id="glassBlur">
+      <feGaussianBlur stdDeviation="60"/>
+    </filter>
   </defs>
 
-  <g>
-    <circle cx="300" cy="210" r="420" fill="url(#a1)">
+  <!-- 漂浮光球层（带有连续平滑平移动画） -->
+  <g filter="url(#glassBlur)">
+    <!-- 左上蔚蓝光球 -->
+    <circle cx="340" cy="240" r="480" fill="url(#auroraBlue)">
       <animateTransform attributeName="transform" type="translate"
-        values="0 0; 110 70; -60 40; 0 0" dur="24s" repeatCount="indefinite"/>
-      <animate attributeName="r" values="420;470;400;420" dur="19s" repeatCount="indefinite"/>
+        values="0 0; 120 80; -80 60; 0 0" dur="26s" repeatCount="indefinite"/>
+      <animate attributeName="r" values="480;540;460;480" dur="20s" repeatCount="indefinite"/>
     </circle>
-    <circle cx="1320" cy="640" r="470" fill="url(#a2)">
+
+    <!-- 右下薄荷绿光球 -->
+    <circle cx="1580" cy="780" r="520" fill="url(#auroraMint)">
       <animateTransform attributeName="transform" type="translate"
-        values="0 0; -120 -60; 60 -110; 0 0" dur="28s" repeatCount="indefinite"/>
+        values="0 0; -140 -90; 80 -120; 0 0" dur="30s" repeatCount="indefinite"/>
     </circle>
-    <circle cx="900" cy="180" r="330" fill="url(#a3)">
+
+    <!-- 中上方紫罗兰微光 -->
+    <circle cx="1060" cy="220" r="420" fill="url(#auroraViolet)">
       <animateTransform attributeName="transform" type="translate"
-        values="0 0; 70 120; -90 30; 0 0" dur="31s" repeatCount="indefinite"/>
+        values="0 0; 90 130; -110 50; 0 0" dur="34s" repeatCount="indefinite"/>
+    </circle>
+
+    <!-- 左下方暖金光斑 -->
+    <circle cx="280" cy="840" r="380" fill="url(#auroraAmber)">
+      <animateTransform attributeName="transform" type="translate"
+        values="0 0; 70 -60; -50 90; 0 0" dur="28s" repeatCount="indefinite"/>
     </circle>
   </g>
 
-  <path fill="url(#wave1)"
-    d="M0 690 C 260 610, 500 770, 800 680 S 1340 600, 1600 670 L1600 900 L0 900 Z">
-    <animate attributeName="d" dur="17s" repeatCount="indefinite"
-      values="M0 690 C 260 610, 500 770, 800 680 S 1340 600, 1600 670 L1600 900 L0 900 Z;
-              M0 660 C 260 750, 520 600, 800 700 S 1320 750, 1600 640 L1600 900 L0 900 Z;
-              M0 690 C 260 610, 500 770, 800 680 S 1340 600, 1600 670 L1600 900 L0 900 Z"/>
-  </path>
-  <path fill="url(#wave2)"
-    d="M0 780 C 300 720, 560 830, 880 760 S 1360 720, 1600 780 L1600 900 L0 900 Z">
-    <animate attributeName="d" dur="21s" repeatCount="indefinite"
-      values="M0 780 C 300 720, 560 830, 880 760 S 1360 720, 1600 780 L1600 900 L0 900 Z;
-              M0 750 C 320 830, 600 710, 900 790 S 1340 810, 1600 750 L1600 900 L0 900 Z;
-              M0 780 C 300 720, 560 830, 880 760 S 1360 720, 1600 780 L1600 900 L0 900 Z"/>
+  <!-- 动态波浪下边缘 1 -->
+  <path fill="url(#waveGrad1)"
+    d="M0 860 C 380 780, 680 940, 1050 850 S 1620 770, 1920 840 L1920 1080 L0 1080 Z">
+    <animate attributeName="d" dur="22s" repeatCount="indefinite"
+      values="M0 860 C 380 780, 680 940, 1050 850 S 1620 770, 1920 840 L1920 1080 L0 1080 Z;
+              M0 820 C 360 920, 720 780, 1080 880 S 1580 920, 1920 810 L1920 1080 L0 1080 Z;
+              M0 860 C 380 780, 680 940, 1050 850 S 1620 770, 1920 840 L1920 1080 L0 1080 Z"/>
   </path>
 
-  <g fill="#ffffff" opacity=".5">
-    <circle cx="180" cy="120" r="2.5">
-      <animate attributeName="opacity" values=".15;.8;.15" dur="4.5s" repeatCount="indefinite"/>
+  <!-- 动态波浪下边缘 2（交错波动） -->
+  <path fill="url(#waveGrad2)"
+    d="M0 940 C 320 880, 740 990, 1140 920 S 1660 880, 1920 950 L1920 1080 L0 1080 Z">
+    <animate attributeName="d" dur="27s" repeatCount="indefinite"
+      values="M0 940 C 320 880, 740 990, 1140 920 S 1660 880, 1920 950 L1920 1080 L0 1080 Z;
+              M0 910 C 380 990, 800 890, 1180 960 S 1640 980, 1920 920 L1920 1080 L0 1080 Z;
+              M0 940 C 320 880, 740 990, 1140 920 S 1660 880, 1920 950 L1920 1080 L0 1080 Z"/>
+  </path>
+
+  <!-- 悬浮微粒（增加层次与纵深感） -->
+  <g fill="#ffffff">
+    <circle cx="260" cy="180" r="3" opacity="0.65">
+      <animate attributeName="opacity" values="0.2;0.85;0.2" dur="5s" repeatCount="indefinite"/>
     </circle>
-    <circle cx="1120" cy="300" r="2">
-      <animate attributeName="opacity" values=".7;.15;.7" dur="6s" repeatCount="indefinite"/>
+    <circle cx="820" cy="340" r="2.2" opacity="0.5">
+      <animate attributeName="opacity" values="0.7;0.15;0.7" dur="6.5s" repeatCount="indefinite"/>
     </circle>
-    <circle cx="1460" cy="180" r="2">
-      <animate attributeName="opacity" values=".2;.85;.2" dur="5.2s" repeatCount="indefinite"/>
+    <circle cx="1380" cy="220" r="2.5" opacity="0.6">
+      <animate attributeName="opacity" values="0.25;0.9;0.25" dur="5.8s" repeatCount="indefinite"/>
     </circle>
-    <circle cx="640" cy="420" r="1.8">
-      <animate attributeName="opacity" values=".6;.1;.6" dur="7s" repeatCount="indefinite"/>
+    <circle cx="1690" cy="480" r="2" opacity="0.45">
+      <animate attributeName="opacity" values="0.6;0.1;0.6" dur="7.2s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="520" cy="620" r="2.4" opacity="0.55">
+      <animate attributeName="opacity" values="0.15;0.75;0.15" dur="6s" repeatCount="indefinite"/>
     </circle>
   </g>
 </svg>

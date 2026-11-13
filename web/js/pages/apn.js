@@ -26,7 +26,7 @@ export function render(container, context) {
   container.appendChild(grid);
 
   // 模式配置
-  const cfgCard = ctx.card({ title: 'APN 模式', subtitle: '/api/apn/config', span: 5, icon: 'globe' });
+  const cfgCard = ctx.card({ title: 'APN 模式', subtitle: '接入点模式与策略选择', span: 5, icon: 'globe' });
   const mode = selectField({
     label: '模式', name: 'apnmode', options: [
       { value: '0', label: '自动（系统管理）' }, { value: '1', label: '手动（使用模板）' }
@@ -61,7 +61,7 @@ export function render(container, context) {
   grid.appendChild(cfgCard.el);
 
   // 模板列表
-  const tplCard = ctx.card({ title: 'APN 模板', subtitle: '/api/apn/templates', span: 7, icon: 'list' });
+  const tplCard = ctx.card({ title: 'APN 模板', subtitle: '自定义运营商网络接入点配置', span: 7, icon: 'list' });
   tplCard.head.querySelector('.card__actions').appendChild(
     button('新建模板', { variant: 'primary sm', icon: 'plus', onClick: () => openEditor(null) }));
   templateTable = ctx.dataTable({

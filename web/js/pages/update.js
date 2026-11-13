@@ -75,7 +75,14 @@ export function render(container, context) {
     el('div', { class: 'row' }, urlBtn, uploadBtn));
   grid.appendChild(pkgCard.el);
 
-  const logCard = ctx.card({ title: '更新日志', span: 12, icon: 'list' });
+  const logCard = (ctx.collapsibleCard || ctx.card)({
+    title: '更新执行日志控制台',
+    subtitle: '固件传输、校验与刷写详细输出',
+    span: 12,
+    icon: 'list',
+    open: false,
+    badge: '查看日志'
+  });
   logEl = el('pre', {
     class: 'mono',
     style: { background: '#0b1220', color: '#cde3d0', padding: '12px', borderRadius: '8px', minHeight: '160px', maxHeight: '280px', overflow: 'auto', whiteSpace: 'pre-wrap' },

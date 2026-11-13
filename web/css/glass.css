@@ -1,49 +1,15 @@
 /**
- * glass.css —— 白色毛玻璃视觉层 + 动态 SVG 背景 + 看门狗提示条。
- * 必须最后加载：在 tokens.css 变量之上补 backdrop-filter、光泽与动画。
- * 严格 CSP 下不含内联样式；动画全部为 CSS/SMIL 声明式动画。
+ * glass.css —— 白色毛玻璃视觉系统（Glassmorphism Engine）与动态光泽层。
+ *
+ * 核心技术实现：
+ *  - 双层 backdrop-filter 模糊与饱和度提亮 (saturate 185%)；
+ *  - 纯净白半透明亚克力质感，内发光 (inset 0 1px 1px) 模拟真实玻璃边缘光折射；
+ *  - 柔和流动的动态渐变与卡片微浮动响应；
+ *  - 严格 CSP 兼容：无任何内联 style 注入，全部采用类名组合与 CSSOM。
  */
 
-/* ---------- 动态光晕背景（aurora.svg 内部含 SMIL 漂浮动画） ---------- */
-body {
-  background-color: var(--bg);
-  background-image:
-    radial-gradient(circle at 12% 8%, rgba(99, 160, 255, 0.20), transparent 42%),
-    radial-gradient(circle at 88% 82%, rgba(56, 205, 190, 0.16), transparent 46%),
-    linear-gradient(145deg, #f4f8ff 0%, #e6eefb 48%, #eef3ff 100%);
-  background-attachment: fixed;
-}
-
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background: url("/icons/aurora.svg") center center / cover no-repeat;
-  opacity: 0.9;
-}
-
-/* 深色玻璃：背景同步切到深色渐变，避免浅色底 + 深色卡片造成割裂 */
-:root[data-theme="dark"] body {
-  background-image:
-    radial-gradient(circle at 12% 8%, rgba(37, 99, 235, 0.22), transparent 42%),
-    radial-gradient(circle at 88% 82%, rgba(8, 145, 178, 0.18), transparent 46%),
-    linear-gradient(145deg, #0d1728 0%, #14233c 48%, #0f1d33 100%);
-}
-:root[data-theme="dark"] body::before { opacity: 0.28; }
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) body {
-    background-image:
-      radial-gradient(circle at 12% 8%, rgba(37, 99, 235, 0.22), transparent 42%),
-      radial-gradient(circle at 88% 82%, rgba(8, 145, 178, 0.18), transparent 46%),
-      linear-gradient(145deg, #0d1728 0%, #14233c 48%, #0f1d33 100%);
-  }
-  :root:not([data-theme="light"]) body::before { opacity: 0.28; }
-}
-
-/* ---------- 通用玻璃混入（以类名组合实现） ---------- */
+/* ============ 通用毛玻璃质感底色 ============ */
+.header-dock__inner,
 .sidebar,
 .topbar__inner,
 .card,
@@ -51,155 +17,595 @@ body::before {
 .confirm__panel,
 .table-wrap,
 .login-card,
-.watchdog-banner {
+.watchdog-banner,
+.bottom-nav {
   background: var(--surface);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(165%);
-  backdrop-filter: blur(var(--glass-blur)) saturate(165%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(185%);
+  backdrop-filter: blur(var(--glass-blur)) saturate(185%);
   border: 1px solid var(--glass-border);
   box-shadow: var(--glass-shadow);
+  position: relative;
 }
 
+.is-hidden {
+  display: none !important;
+}
+
+/* ============ 卡片（Card）玻璃美化与微动效 ============ */
 .card {
   border-radius: var(--radius-card);
-  transition: transform 0.25s ease, box-shadow 0.25s ease;
+  transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1),
+              box-shadow 0.28s cubic-bezier(0.2, 0.8, 0.2, 1),
+              border-color 0.28s ease,
+              background-color 0.28s ease;
+  overflow: hidden;
 }
+
 .card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 20px 46px rgba(29, 58, 105, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.95);
-}
-.card__icon {
-  background: linear-gradient(140deg, rgba(37, 99, 235, 0.18), rgba(8, 145, 178, 0.14));
-  border: 1px solid rgba(255, 255, 255, 0.7);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  background: var(--surface-card);
+  border-color: rgba(255, 255, 255, 0.96);
+  box-shadow: var(--glass-shadow-hover);
 }
 
-.topbar__inner { border-radius: var(--radius-lg); }
-.sidebar { border-right: 1px solid var(--glass-border); }
+:root[data-theme="dark"] .card:hover {
+  border-color: rgba(255, 255, 255, 0.24);
+}
+
+/* 卡片标题栏微高光 */
+.card__head {
+  position: relative;
+}
+
+/* 卡片图标容器（圆形/圆角半透明玻璃微标） */
+.card__icon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.16), rgba(6, 182, 212, 0.12));
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.9), 0 4px 10px rgba(37, 99, 235, 0.08);
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: transform 0.22s ease, background 0.22s ease;
+}
+
+.card:hover .card__icon {
+  transform: scale(1.05);
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.22), rgba(6, 182, 212, 0.18));
+}
+
+/* ============ 顶部栏与导航毛玻璃 ============ */
+.topbar__inner {
+  border-radius: var(--radius-lg);
+  padding: 10px 18px;
+  min-height: 60px;
+  border: 1px solid var(--glass-border);
+}
+
+.sidebar {
+  border-right: 1px solid var(--glass-border);
+}
+
+/* 导航项激活态与悬停玻璃药丸 */
+.nav__item {
+  position: relative;
+  border-radius: var(--radius-sm);
+  transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.nav__item:hover {
+  background: var(--surface-muted);
+  color: var(--text);
+  transform: translateX(2px);
+}
 
 .nav__item.is-active {
-  background: linear-gradient(100deg, rgba(37, 99, 235, 0.20), rgba(37, 99, 235, 0.08));
-  border: 1px solid rgba(255, 255, 255, 0.75);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  background: linear-gradient(105deg, rgba(37, 99, 235, 0.18), rgba(6, 182, 212, 0.10));
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  color: var(--primary);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.95), 0 4px 14px rgba(37, 99, 235, 0.12);
+  font-weight: 700;
 }
+
+:root[data-theme="dark"] .nav__item.is-active {
+  border-color: rgba(255, 255, 255, 0.20);
+}
+
 .nav__icon {
-  background: rgba(255, 255, 255, 0.55);
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.6);
   border: 1px solid rgba(255, 255, 255, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
 }
+
+.nav__item:hover .nav__icon {
+  background: rgba(255, 255, 255, 0.85);
+}
+
 .nav__item.is-active .nav__icon {
-  background: linear-gradient(140deg, var(--primary), var(--info));
+  background: var(--primary-gradient);
+  color: #ffffff;
   border-color: rgba(255, 255, 255, 0.5);
-  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.35);
+  box-shadow: 0 4px 12px var(--primary-glow);
 }
 
+/* ============ 按钮（Button）毛玻璃质感 ============ */
 .btn {
-  background: rgba(255, 255, 255, 0.58);
-  border: 1px solid rgba(255, 255, 255, 0.82);
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
-}
-.btn:hover { background: rgba(255, 255, 255, 0.82); }
-.btn--primary {
-  background: linear-gradient(135deg, #2563eb, #0ea5b7);
-  border-color: rgba(255, 255, 255, 0.45);
-  box-shadow: 0 8px 22px rgba(37, 99, 235, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.35);
-}
-.btn--danger {
-  background: linear-gradient(135deg, #d24b5c, #b4303f);
-  border-color: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.65);
+  border: 1px solid var(--glass-border);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.9), 0 2px 6px rgba(20, 50, 95, 0.04);
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
+.btn:hover {
+  background: rgba(255, 255, 255, 0.92);
+  transform: translateY(-1px);
+  box-shadow: inset 0 1px 1px #fff, 0 6px 16px rgba(20, 50, 95, 0.08);
+}
+
+.btn:active {
+  transform: translateY(1px);
+}
+
+.btn--primary {
+  background: var(--primary-gradient);
+  border-color: rgba(255, 255, 255, 0.45);
+  color: #ffffff;
+  box-shadow: 0 6px 20px var(--primary-glow), inset 0 1px 1px rgba(255, 255, 255, 0.4);
+}
+
+.btn--primary:hover {
+  filter: brightness(1.08);
+  box-shadow: 0 8px 24px var(--primary-glow), inset 0 1px 1px rgba(255, 255, 255, 0.6);
+}
+
+.btn--danger {
+  background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
+  border-color: rgba(255, 255, 255, 0.4);
+  color: #ffffff;
+  box-shadow: 0 6px 18px var(--danger-glow);
+}
+
+.btn--danger:hover {
+  filter: brightness(1.08);
+}
+
+/* 圆形/方块图标按钮 */
+.icon-btn {
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid var(--glass-border);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border-radius: var(--radius-sm);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.9), 0 2px 5px rgba(20, 50, 95, 0.03);
+  transition: all 0.2s ease;
+}
+
+.icon-btn:hover {
+  background: rgba(255, 255, 255, 0.95);
+  color: var(--primary);
+  transform: translateY(-1px);
+  box-shadow: 0 5px 14px rgba(20, 50, 95, 0.08);
+}
+
+/* ============ 表单控件（Input / Select / Switch） ============ */
 .input, .select {
   background: rgba(255, 255, 255, 0.62);
-  border: 1px solid rgba(255, 255, 255, 0.85);
+  border: 1px solid var(--glass-border);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  box-shadow: inset 0 1px 2px rgba(20, 50, 95, 0.04);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  transition: all 0.2s ease;
+}
+
+.input:focus, .select:focus {
+  background: rgba(255, 255, 255, 0.92);
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3.5px var(--primary-glow), inset 0 1px 2px rgba(20, 50, 95, 0.02);
+}
+
+:root[data-theme="dark"] .input,
+:root[data-theme="dark"] .select {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+:root[data-theme="dark"] .input:focus,
+:root[data-theme="dark"] .select:focus {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+/* ============ 徽标与状态指示灯（Badges & Light） ============ */
+.badge {
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid var(--glass-border);
   -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
-  box-shadow: inset 0 1px 2px rgba(29, 58, 105, 0.05);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
 }
 
-.badge {
-  background: rgba(255, 255, 255, 0.62);
-  border: 1px solid rgba(255, 255, 255, 0.8);
-  -webkit-backdrop-filter: blur(6px);
-  backdrop-filter: blur(6px);
+.badge--ok {
+  background: rgba(16, 185, 129, 0.14);
+  border-color: rgba(16, 185, 129, 0.35);
+  color: var(--ok);
+}
+.badge--danger {
+  background: rgba(239, 68, 68, 0.14);
+  border-color: rgba(239, 68, 68, 0.35);
+  color: var(--danger);
+}
+.badge--warning {
+  background: rgba(245, 158, 11, 0.14);
+  border-color: rgba(245, 158, 11, 0.35);
+  color: var(--warning);
+}
+.badge--primary {
+  background: rgba(37, 99, 235, 0.14);
+  border-color: rgba(37, 99, 235, 0.35);
+  color: var(--primary);
 }
 
-.modal__panel, .confirm__panel { border-radius: var(--radius-lg); }
-dialog::backdrop {
-  background: rgba(20, 38, 70, 0.28);
-  -webkit-backdrop-filter: blur(6px);
-  backdrop-filter: blur(6px);
+/* 呼吸光信标 */
+.dot {
+  position: relative;
+}
+.dot--ok {
+  background: #10b981;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.22);
+  animation: beacon-pulse 2s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
+}
+.dot--warning {
+  background: #f59e0b;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.22);
+}
+.dot--danger {
+  background: #ef4444;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.22);
+  animation: beacon-pulse 1.4s ease-out infinite;
 }
 
-/* ---------- 品牌动态 SVG ---------- */
-.brand__logo {
-  background: transparent;
-  border: 0;
-  box-shadow: none;
-  width: 44px;
+@keyframes beacon-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.45); }
+  70% { box-shadow: 0 0 0 7px rgba(16, 185, 129, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+
+/* ============ 动态 SVG 容器与仪表盘组件样式 ============ */
+.hero-radar-wrap {
+  position: relative;
+  width: 100%;
+  border-radius: var(--radius-card);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.55), rgba(240, 246, 255, 0.4));
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  overflow: hidden;
+  margin-bottom: var(--space-4);
+}
+
+.hero-radar-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 220px;
+}
+
+.hero-radar-overlay {
+  position: absolute;
+  top: 12px;
+  left: 14px;
+  right: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  pointer-events: none;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.hero-radar-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.85);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 2px 8px rgba(20, 50, 95, 0.06);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+.hero-radar-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hero-radar-stat {
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 255, 255, 0.75);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--glass-border);
+  font-size: 11px;
+  font-family: var(--mono);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+/* 环形仪表盘网格与单项 */
+.gauge-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.svg-gauge-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 8px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.45);
+  border: 1px solid var(--glass-border-subtle);
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.svg-gauge-box:hover {
+  transform: translateY(-2px);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.svg-gauge {
+  display: block;
+  overflow: visible;
+}
+
+.svg-gauge__label {
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* 贝塞尔平滑趋势折线图 */
+.sparkline-smooth {
+  width: 100%;
+  height: 160px;
+  display: block;
+  overflow: visible;
+}
+
+/* ============ 手机底部导航栏（Bottom Nav） ============ */
+.bottom-nav {
+  display: none;
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+  height: 60px;
+  border-radius: 20px;
+  z-index: 50;
+  padding: 0 8px;
+  align-items: center;
+  justify-content: space-around;
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 10px 30px rgba(15, 35, 75, 0.12), inset 0 1px 1px #fff;
+}
+
+.bottom-nav__item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  height: 48px;
+  border-radius: 14px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.bottom-nav__item .icon {
+  width: 20px;
+  height: 20px;
+}
+
+.bottom-nav__item.is-active {
+  color: var(--primary);
+  background: rgba(37, 99, 235, 0.12);
+  font-weight: 700;
+}
+
+.bottom-nav__item.is-active .icon {
+  transform: scale(1.1);
+  color: var(--primary);
+}
+
+/* ============ 登录页毛玻璃卡片与动态视觉 ============ */
+.login-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  background: var(--bg-gradient);
+  background-attachment: fixed;
+}
+
+.login-top-bar {
+  position: fixed;
+  top: calc(16px + env(safe-area-inset-top, 0px));
+  right: calc(16px + env(safe-area-inset-right, 0px));
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  z-index: 110;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 440px;
+  background: var(--surface-card);
+  -webkit-backdrop-filter: blur(var(--glass-blur-lg)) saturate(190%);
+  backdrop-filter: blur(var(--glass-blur-lg)) saturate(190%);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--glass-shadow-modal);
+  overflow: hidden;
+  animation: login-card-pop 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.login-card__head {
+  padding: 32px 28px 16px;
+  text-align: center;
+}
+
+.login-hero-img {
+  width: 180px;
+  height: auto;
+  margin: 0 auto 12px;
+  display: block;
+  filter: drop-shadow(0 8px 18px rgba(37, 99, 235, 0.15));
+}
+
+.login-card__title {
+  font-size: 23px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  background: linear-gradient(135deg, var(--text) 0%, var(--primary) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.login-card__subtitle {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  margin-top: 5px;
+  font-weight: 500;
+}
+
+.login-card__body {
+  padding: 18px 30px 28px;
+}
+
+.login-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.login-input-icon {
+  position: absolute;
+  left: 12px;
+  color: var(--text-muted);
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+}
+
+.login-pwd-input {
+  padding-left: 38px !important;
+  padding-right: 42px !important;
   height: 44px;
 }
-.brand__live { width: 44px; height: 44px; display: block; }
-.brand__text h1 { letter-spacing: 0.02em; }
 
-.hero-live { display: block; width: 100%; height: auto; border-radius: var(--radius-card); }
-.live-wave { display: block; width: 100%; height: 120px; }
-
-/* ---------- 登录页玻璃卡 ---------- */
-.login-screen {
-  background:
-    radial-gradient(circle at 78% 12%, rgba(99, 160, 255, 0.28), transparent 42%),
-    radial-gradient(circle at 12% 88%, rgba(56, 205, 190, 0.22), transparent 44%),
-    linear-gradient(145deg, #f4f8ff, #e4edfb);
+.login-eye-btn {
+  position: absolute;
+  right: 6px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
 }
-.login-card { border-radius: var(--radius-lg); }
+.login-eye-btn:hover {
+  color: var(--text);
+}
 
-/* ---------- 看门狗状态提示条 ---------- */
+.login-submit-btn {
+  height: 44px;
+  margin-top: 20px;
+  font-size: 14.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.login-card__foot {
+  padding: 12px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 11.5px;
+  color: var(--text-subtle);
+  background: rgba(255, 255, 255, 0.35);
+  border-top: 1px solid var(--glass-border-subtle);
+}
+
+:root[data-theme="dark"] .login-card__foot {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+@keyframes login-card-pop {
+  from { opacity: 0; transform: translateY(18px) scale(0.96); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ============ 看门狗悬浮胶囊 ============ */
 .watchdog-banner {
   position: fixed;
   left: 50%;
-  bottom: 22px;
-  transform: translate(-50%, 140%);
+  bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  transform: translate(-50%, 150%);
   z-index: 200;
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  max-width: min(560px, calc(100vw - 32px));
-  padding: 10px 16px;
-  border-radius: 999px;
+  max-width: min(540px, calc(100vw - 32px));
+  padding: 10px 18px;
+  border-radius: var(--radius-pill);
   font-size: 13px;
   font-weight: 600;
   opacity: 0;
-  transition: transform 0.35s cubic-bezier(.2,.9,.3,1.2), opacity 0.3s ease;
+  transition: transform 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.2), opacity 0.3s ease;
+  box-shadow: var(--glass-shadow-modal);
 }
-.watchdog-banner.is-visible { transform: translate(-50%, 0); opacity: 1; }
+
+.watchdog-banner.is-visible {
+  transform: translate(-50%, 0);
+  opacity: 1;
+}
+
 .watchdog-banner[data-level="error"] { color: var(--danger); }
 .watchdog-banner[data-level="warning"] { color: var(--warning); }
 .watchdog-banner[data-level="ok"] { color: var(--ok); }
-.watchdog-banner__dot {
-  width: 9px; height: 9px; border-radius: 50%;
-  background: currentColor;
-  box-shadow: 0 0 0 0 currentColor;
-  animation: wd-pulse 1.8s ease-out infinite;
-}
-.watchdog-banner__text { flex: 1; min-width: 0; }
-.watchdog-banner button {
-  border: 1px solid var(--glass-border);
-  background: rgba(255, 255, 255, 0.7);
-  color: inherit;
-  border-radius: 999px;
-  padding: 4px 12px;
-  font-size: 12px;
-  font-weight: 700;
-}
-@keyframes wd-pulse {
-  0%   { box-shadow: 0 0 0 0 currentColor; opacity: 1; }
-  70%  { box-shadow: 0 0 0 10px transparent; opacity: .75; }
-  100% { box-shadow: 0 0 0 0 transparent; opacity: 1; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .card { transition: none; }
-  .watchdog-banner { transition: none; }
-  .watchdog-banner__dot { animation: none; }
-}

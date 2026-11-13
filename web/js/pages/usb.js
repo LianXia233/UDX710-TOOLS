@@ -21,7 +21,7 @@ export function render(container, context) {
   const grid = el('div', { class: 'page-grid' });
   container.appendChild(grid);
 
-  const currentCard = ctx.card({ title: '当前 USB 模式', subtitle: '/api/usb/mode', span: 12, icon: 'usb' });
+  const currentCard = ctx.card({ title: '当前 USB 模式', subtitle: '查看与切换终端 USB 复合设备功能', span: 12, icon: 'usb' });
   const currentLabel = el('span', { class: 'badge badge--primary', text: '读取中…' });
   const refreshBtn = button(ctx.t('common.refresh'), { variant: 'ghost sm', icon: 'refresh', onClick: load });
   currentCard.head.querySelector('.card__actions').appendChild(refreshBtn);
@@ -30,7 +30,7 @@ export function render(container, context) {
     el('div', { class: 'alert alert--warning', text: '切换 USB 模式可能导致设备断网、IP 不分配；请确保了解恢复方法后再操作。' }));
   grid.appendChild(currentCard.el);
 
-  const switchCard = ctx.card({ title: '切换 USB 模式', span: 6, icon: 'usb' });
+  const switchCard = ctx.card({ title: '切换 USB 模式', subtitle: '配置目标协议与生效策略', span: 6, icon: 'usb' });
   const mode = selectField({ label: '目标模式', name: 'usbmode', options: MODES });
   const permanent = switchField({ label: '永久生效（重启后仍保留）', checked: false });
   const doSwitch = button('切换模式', {
@@ -75,7 +75,13 @@ export function render(container, context) {
     el('div', { class: 'row' }, doSwitch, hotSwitch));
   grid.appendChild(switchCard.el);
 
-  const tipCard = ctx.card({ title: '模式说明', span: 6, icon: 'info' });
+  // 可折叠说明卡片，收起冗余提示文本
+  const tipCard = (ctx.collapsibleCard || ctx.card)({
+    title: '模式说明与兼容性指南',
+    span: 6,
+    icon: 'info',
+    badge: '点击展开'
+  });
   tipCard.body.appendChild(el('ul', { class: 'muted' },
     el('li', { text: 'RNDIS：兼容性好，适合 Windows / OpenWrt / Padavan 路由器。' }),
     el('li', { text: 'ECM/NCM：兼容性差，不建议在 Windows 设备使用。' }),

@@ -1,41 +1,73 @@
 /**
- * tokens.css —— 设计变量、白色毛玻璃（glassmorphism）主题、全局重置。
+ * tokens.css —— 设计系统变量、白色毛玻璃（Glassmorphism）高质感主题、全局重置。
  *
- * 主题策略：
- *  - 默认 / data-theme="light"：白色半透明玻璃 + 模糊 + 柔和光晕背景。
- *  - data-theme="dark"：深色玻璃变体，仍保留毛玻璃质感与同样的布局变量。
- *  - 未设置 data-theme 时在系统深色偏好下自动切换到深色玻璃。
- * 玻璃的 backdrop-filter / 动态背景由 glass.css 负责，本文件只提供变量。
+ * 核心美学规范：
+ *  - 纯净透亮的白色毛玻璃视觉体系（多层模糊 + 边缘内高光 + 弥散软阴影）；
+ *  - 精准的色彩与对比度层级，兼顾日光下的高可读性与夜间深色模式；
+ *  - 统一的全设备触控区规格与流体网格变量。
  */
 :root {
   color-scheme: light dark;
 
-  /* 白色毛玻璃调色板 */
-  --bg: #eaf1fb;
-  --surface: rgba(255, 255, 255, 0.66);
-  --surface-muted: rgba(255, 255, 255, 0.40);
-  --surface-2: rgba(255, 255, 255, 0.52);
-  --text: #16233b;
-  --text-muted: #5b6b86;
-  --border: rgba(255, 255, 255, 0.72);
-  --glass-border: rgba(255, 255, 255, 0.88);
-  --glass-blur: 22px;
-  --glass-shadow: 0 10px 34px rgba(29, 58, 105, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.92);
+  /* ============ 白色毛玻璃调色板（默认浅色） ============ */
+  --bg: #f0f5fc;
+  --bg-gradient: radial-gradient(circle at 12% 10%, rgba(99, 160, 255, 0.22), transparent 42%),
+                 radial-gradient(circle at 88% 85%, rgba(56, 205, 190, 0.18), transparent 48%),
+                 radial-gradient(circle at 50% 50%, rgba(199, 210, 254, 0.15), transparent 60%),
+                 linear-gradient(145deg, #f8faff 0%, #e8f1fc 50%, #edf4fe 100%);
 
+  --surface: rgba(255, 255, 255, 0.72);
+  --surface-card: rgba(255, 255, 255, 0.78);
+  --surface-muted: rgba(255, 255, 255, 0.46);
+  --surface-2: rgba(255, 255, 255, 0.58);
+  --surface-hover: rgba(255, 255, 255, 0.88);
+  --surface-elevated: rgba(255, 255, 255, 0.85);
+
+  --text: #0f1c34;
+  --text-muted: #536482;
+  --text-subtle: #7a8ba8;
+
+  --border: rgba(255, 255, 255, 0.75);
+  --glass-border: rgba(255, 255, 255, 0.88);
+  --glass-border-subtle: rgba(255, 255, 255, 0.55);
+  --glass-blur: 26px;
+  --glass-blur-sm: 14px;
+  --glass-blur-lg: 32px;
+
+  --glass-shadow: 0 12px 34px -4px rgba(20, 50, 95, 0.07),
+                  0 4px 12px -2px rgba(20, 50, 95, 0.03),
+                  inset 0 1px 1px 0 rgba(255, 255, 255, 0.95);
+  --glass-shadow-hover: 0 20px 46px -6px rgba(20, 50, 95, 0.12),
+                        0 8px 18px -4px rgba(20, 50, 95, 0.06),
+                        inset 0 1px 1px 0 #ffffff;
+  --glass-shadow-modal: 0 26px 70px -10px rgba(15, 35, 75, 0.22),
+                        0 12px 28px -6px rgba(15, 35, 75, 0.12),
+                        inset 0 1px 1.5px 0 rgba(255, 255, 255, 0.95);
+
+  /* 主题色系：科技蔚蓝 + 薄荷青 + 状态色 */
   --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+  --primary-glow: rgba(37, 99, 235, 0.28);
+  --primary-gradient: linear-gradient(135deg, #2563eb 0%, #0ea5e9 100%);
   --primary-contrast: #ffffff;
-  --danger: #c43d4d;
+
+  --ok: #059669;
+  --ok-glow: rgba(16, 185, 129, 0.25);
+  --warning: #d97706;
+  --warning-glow: rgba(245, 158, 11, 0.25);
+  --danger: #dc2626;
+  --danger-glow: rgba(239, 68, 68, 0.25);
   --danger-contrast: #ffffff;
-  --ok: #16845b;
-  --warning: #a9680a;
   --info: #0891b2;
 
-  --sidebar-bg: rgba(255, 255, 255, 0.60);
-  --topbar-bg: rgba(255, 255, 255, 0.68);
+  --sidebar-bg: rgba(255, 255, 255, 0.65);
+  --topbar-bg: rgba(255, 255, 255, 0.72);
+  --bottomnav-bg: rgba(255, 255, 255, 0.82);
 
-  --radius-card: 20px;
-  --radius-sm: 10px;
-  --radius-lg: 26px;
+  --radius-card: 22px;
+  --radius-sm: 12px;
+  --radius-lg: 28px;
+  --radius-pill: 9999px;
 
   --space-1: 4px;
   --space-2: 8px;
@@ -44,103 +76,217 @@
   --space-5: 24px;
   --space-6: 32px;
 
-  --shadow: var(--glass-shadow);
-  --shadow-lg: 0 26px 64px rgba(29, 58, 105, 0.20);
-  --font: system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
-  --mono: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
-  --sidebar-w: 248px;
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+  --mono: "SF Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  --sidebar-w: 256px;
 }
 
-/* 系统深色偏好（未强制浅色时生效） */
+/* ============ 深色毛玻璃主题（系统偏好 / 强制暗色） ============ */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0d1728;
-    --surface: rgba(22, 36, 58, 0.62);
-    --surface-muted: rgba(255, 255, 255, 0.06);
-    --surface-2: rgba(255, 255, 255, 0.10);
-    --text: #e9f1ff;
-    --text-muted: #a2b2cc;
-    --border: rgba(255, 255, 255, 0.14);
-    --glass-border: rgba(255, 255, 255, 0.20);
-    --glass-shadow: 0 12px 40px rgba(0, 0, 0, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.12);
-    --sidebar-bg: rgba(18, 31, 52, 0.60);
-    --topbar-bg: rgba(18, 31, 52, 0.66);
-    --shadow-lg: 0 26px 64px rgba(0, 0, 0, 0.55);
+    --bg: #09111e;
+    --bg-gradient: radial-gradient(circle at 14% 10%, rgba(37, 99, 235, 0.24), transparent 44%),
+                   radial-gradient(circle at 86% 85%, rgba(6, 182, 212, 0.20), transparent 48%),
+                   linear-gradient(145deg, #091220 0%, #0d1a2d 50%, #0a1322 100%);
+    --surface: rgba(19, 32, 53, 0.68);
+    --surface-card: rgba(21, 36, 58, 0.74);
+    --surface-muted: rgba(255, 255, 255, 0.08);
+    --surface-2: rgba(255, 255, 255, 0.12);
+    --surface-hover: rgba(255, 255, 255, 0.15);
+    --surface-elevated: rgba(24, 40, 66, 0.82);
+
+    --text: #f0f6ff;
+    --text-muted: #9bb0cd;
+    --text-subtle: #6b82a3;
+
+    --border: rgba(255, 255, 255, 0.12);
+    --glass-border: rgba(255, 255, 255, 0.18);
+    --glass-border-subtle: rgba(255, 255, 255, 0.10);
+
+    --glass-shadow: 0 14px 40px -4px rgba(0, 0, 0, 0.42),
+                    0 4px 14px -2px rgba(0, 0, 0, 0.25),
+                    inset 0 1px 1px 0 rgba(255, 255, 255, 0.14);
+    --glass-shadow-hover: 0 22px 52px -6px rgba(0, 0, 0, 0.52),
+                          inset 0 1px 1px 0 rgba(255, 255, 255, 0.22);
+    --glass-shadow-modal: 0 30px 80px -10px rgba(0, 0, 0, 0.72),
+                          inset 0 1px 1.5px 0 rgba(255, 255, 255, 0.20);
+
+    --sidebar-bg: rgba(15, 26, 43, 0.68);
+    --topbar-bg: rgba(17, 30, 48, 0.72);
+    --bottomnav-bg: rgba(17, 30, 48, 0.86);
   }
 }
 
-/* 强制深色 */
 :root[data-theme="dark"] {
-  --bg: #0d1728;
-  --surface: rgba(22, 36, 58, 0.62);
-  --surface-muted: rgba(255, 255, 255, 0.06);
-  --surface-2: rgba(255, 255, 255, 0.10);
-  --text: #e9f1ff;
-  --text-muted: #a2b2cc;
-  --border: rgba(255, 255, 255, 0.14);
-  --glass-border: rgba(255, 255, 255, 0.20);
-  --glass-shadow: 0 12px 40px rgba(0, 0, 0, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.12);
-  --sidebar-bg: rgba(18, 31, 52, 0.60);
-  --topbar-bg: rgba(18, 31, 52, 0.66);
-  --shadow-lg: 0 26px 64px rgba(0, 0, 0, 0.55);
+  --bg: #09111e;
+  --bg-gradient: radial-gradient(circle at 14% 10%, rgba(37, 99, 235, 0.24), transparent 44%),
+                 radial-gradient(circle at 86% 85%, rgba(6, 182, 212, 0.20), transparent 48%),
+                 linear-gradient(145deg, #091220 0%, #0d1a2d 50%, #0a1322 100%);
+  --surface: rgba(19, 32, 53, 0.68);
+  --surface-card: rgba(21, 36, 58, 0.74);
+  --surface-muted: rgba(255, 255, 255, 0.08);
+  --surface-2: rgba(255, 255, 255, 0.12);
+  --surface-hover: rgba(255, 255, 255, 0.15);
+  --surface-elevated: rgba(24, 40, 66, 0.82);
+
+  --text: #f0f6ff;
+  --text-muted: #9bb0cd;
+  --text-subtle: #6b82a3;
+
+  --border: rgba(255, 255, 255, 0.12);
+  --glass-border: rgba(255, 255, 255, 0.18);
+  --glass-border-subtle: rgba(255, 255, 255, 0.10);
+
+  --glass-shadow: 0 14px 40px -4px rgba(0, 0, 0, 0.42),
+                  0 4px 14px -2px rgba(0, 0, 0, 0.25),
+                  inset 0 1px 1px 0 rgba(255, 255, 255, 0.14);
+  --glass-shadow-hover: 0 22px 52px -6px rgba(0, 0, 0, 0.52),
+                        inset 0 1px 1px 0 rgba(255, 255, 255, 0.22);
+  --glass-shadow-modal: 0 30px 80px -10px rgba(0, 0, 0, 0.72),
+                        inset 0 1px 1.5px 0 rgba(255, 255, 255, 0.20);
+
+  --sidebar-bg: rgba(15, 26, 43, 0.68);
+  --topbar-bg: rgba(17, 30, 48, 0.72);
+  --bottomnav-bg: rgba(17, 30, 48, 0.86);
 }
 
-/* 强制浅色：白色毛玻璃（覆盖系统深色） */
 :root[data-theme="light"] {
-  --bg: #eaf1fb;
-  --surface: rgba(255, 255, 255, 0.66);
-  --surface-muted: rgba(255, 255, 255, 0.40);
-  --surface-2: rgba(255, 255, 255, 0.52);
-  --text: #16233b;
-  --text-muted: #5b6b86;
-  --border: rgba(255, 255, 255, 0.72);
+  --bg: #f0f5fc;
+  --bg-gradient: radial-gradient(circle at 12% 10%, rgba(99, 160, 255, 0.22), transparent 42%),
+                 radial-gradient(circle at 88% 85%, rgba(56, 205, 190, 0.18), transparent 48%),
+                 radial-gradient(circle at 50% 50%, rgba(199, 210, 254, 0.15), transparent 60%),
+                 linear-gradient(145deg, #f8faff 0%, #e8f1fc 50%, #edf4fe 100%);
+  --surface: rgba(255, 255, 255, 0.72);
+  --surface-card: rgba(255, 255, 255, 0.78);
+  --surface-muted: rgba(255, 255, 255, 0.46);
+  --surface-2: rgba(255, 255, 255, 0.58);
+  --surface-hover: rgba(255, 255, 255, 0.88);
+  --surface-elevated: rgba(255, 255, 255, 0.85);
+
+  --text: #0f1c34;
+  --text-muted: #536482;
+  --text-subtle: #7a8ba8;
+
+  --border: rgba(255, 255, 255, 0.75);
   --glass-border: rgba(255, 255, 255, 0.88);
-  --glass-shadow: 0 10px 34px rgba(29, 58, 105, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.92);
-  --sidebar-bg: rgba(255, 255, 255, 0.60);
-  --topbar-bg: rgba(255, 255, 255, 0.68);
-  --shadow-lg: 0 26px 64px rgba(29, 58, 105, 0.20);
+  --glass-border-subtle: rgba(255, 255, 255, 0.55);
+
+  --glass-shadow: 0 12px 34px -4px rgba(20, 50, 95, 0.07),
+                  0 4px 12px -2px rgba(20, 50, 95, 0.03),
+                  inset 0 1px 1px 0 rgba(255, 255, 255, 0.95);
+  --glass-shadow-hover: 0 20px 46px -6px rgba(20, 50, 95, 0.12),
+                        0 8px 18px -4px rgba(20, 50, 95, 0.06),
+                        inset 0 1px 1px 0 #ffffff;
+  --glass-shadow-modal: 0 26px 70px -10px rgba(15, 35, 75, 0.22),
+                        0 12px 28px -6px rgba(15, 35, 75, 0.12),
+                        inset 0 1px 1.5px 0 rgba(255, 255, 255, 0.95);
+
+  --sidebar-bg: rgba(255, 255, 255, 0.65);
+  --topbar-bg: rgba(255, 255, 255, 0.72);
+  --bottomnav-bg: rgba(255, 255, 255, 0.82);
 }
 
-/* ============ 重置 ============ */
+/* ============ 全局重置与排版规范 ============ */
 *, *::before, *::after { box-sizing: border-box; }
 
-html, body { height: 100%; }
-html { scroll-behavior: smooth; }
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+}
 
 body {
-  margin: 0;
-  background: var(--bg);
+  background-color: var(--bg);
+  background-image: var(--bg-gradient);
+  background-attachment: fixed;
   color: var(--text);
   font-family: var(--font);
   font-size: 14px;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  overflow-x: hidden;
+}
+
+/* 背景动态极光浮层 */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: url("/icons/aurora.svg") center center / cover no-repeat;
+  opacity: 0.95;
+  transition: opacity 0.5s ease;
+}
+
+:root[data-theme="dark"] body::before,
+:root:not([data-theme="light"]) body::before {
+  opacity: 0.32;
 }
 
 h1, h2, h3, h4, h5, h6, p, ul, ol, figure { margin: 0; }
 ul, ol { padding-left: 1.2em; }
 
-a { color: var(--primary); text-decoration: none; }
-a:hover { text-decoration: underline; }
+a {
+  color: var(--primary);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+a:hover { color: var(--primary-hover); text-decoration: underline; }
 
-button, input, select, textarea { font: inherit; color: inherit; }
-button { cursor: pointer; }
+button, input, select, textarea {
+  font: inherit;
+  color: inherit;
+}
+button {
+  cursor: pointer;
+  border: 0;
+  background: transparent;
+}
 img, svg { vertical-align: middle; }
 
-::selection { background: color-mix(in srgb, var(--primary) 28%, transparent); }
+::selection {
+  background: color-mix(in srgb, var(--primary) 30%, transparent);
+}
 
-:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
 
-/* 滚动条 */
-* { scrollbar-color: var(--border) transparent; scrollbar-width: thin; }
-*::-webkit-scrollbar { width: 9px; height: 9px; }
-*::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
-*::-webkit-scrollbar-track { background: transparent; }
+/* 精致毛玻璃滚动条 */
+* {
+  scrollbar-color: var(--border) transparent;
+  scrollbar-width: thin;
+}
+*::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: var(--radius-pill);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--text-subtle);
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
 
-/* 通用工具类 */
+/* 工具样式类 */
 .mono { font-family: var(--mono); font-size: 0.92em; }
 .muted { color: var(--text-muted); }
+.subtle { color: var(--text-subtle); font-size: 0.88em; }
 .nowrap { white-space: nowrap; }
 .text-danger { color: var(--danger); }
 .text-ok { color: var(--ok); }
@@ -149,8 +295,8 @@ img, svg { vertical-align: middle; }
 .tone-warning { color: var(--warning); }
 
 .icon {
-  width: 1.15em;
-  height: 1.15em;
+  width: 1.2em;
+  height: 1.2em;
   display: inline-block;
   flex-shrink: 0;
   fill: none;
@@ -160,9 +306,13 @@ img, svg { vertical-align: middle; }
   stroke-linejoin: round;
   color: inherit;
   vertical-align: -0.15em;
+  transition: transform 0.2s ease, color 0.2s ease;
 }
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
-  *, *::before, *::after { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
 }

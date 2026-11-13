@@ -15,6 +15,7 @@ import {
 export function openModal({
   title = '',
   content = null,
+  body: bodyContent = null,
   footer = null,
   width = '',
   className = '',
@@ -22,6 +23,7 @@ export function openModal({
   dismissible = true,
   onClose = null
 } = {}) {
+  const actualContent = content !== null ? content : bodyContent;
   const resolved = resolveVariant(variant);
   const dialog = el('dialog', { class: `modal ${className}`.trim() });
   applyVariant(dialog, resolved);
@@ -81,12 +83,12 @@ export function openModal({
   });
 
   // 内容
-  if (typeof content === 'function') {
-    content(body, api);
-  } else if (content instanceof Node) {
-    body.appendChild(content);
-  } else if (content != null) {
-    body.appendChild(el('p', { text: String(content) }));
+  if (typeof actualContent === 'function') {
+    actualContent(body, api);
+  } else if (actualContent instanceof Node) {
+    body.appendChild(actualContent);
+  } else if (actualContent != null) {
+    body.appendChild(el('p', { text: String(actualContent) }));
   }
 
   // 底部操作区

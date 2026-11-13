@@ -30,7 +30,7 @@ export function render(container, context) {
   const grid = el('div', { class: 'page-grid' });
   container.appendChild(grid);
 
-  const mainCard = ctx.card({ title: 'AT 命令', subtitle: 'POST /api/at', span: 8, icon: 'terminal' });
+  const mainCard = ctx.card({ title: 'AT 命令控制台', subtitle: '模组微指令调试与物理串口透传', span: 8, icon: 'terminal' });
   const cmdField = field({ label: '命令', name: 'atcmd', placeholder: '输入 AT 命令，如 AT+CSQ' });
   const cmdInput = cmdField.input;
   const sendBtn = button(ctx.t('common.send'), { variant: 'primary', icon: 'send' });
@@ -51,9 +51,9 @@ export function render(container, context) {
       if (o.status === 'error' || o.outcome === 'failed') {
         const kind = o.error_kind || 'at_unavailable';
         const hints = {
-          modem_absent: '模组未就绪：oFono 未托管 Modem 对象，AT 命令无法下发',
-          dbus_timeout: 'AT 通道超时，请检查 /api/health 中的 dbus_ok / ofono_ok',
-          at_unavailable: 'AT 通道不可用'
+          modem_absent: '模组未就绪：通信模组未托管，AT 命令无法下发',
+          dbus_timeout: 'AT 通道超时，请检查底层通信服务就绪状态',
+          at_unavailable: 'AT 通道暂不可用'
         };
         appendLine(`[${kind}] ${hints[kind] || safeText(o.message, '命令失败')}`, 'terminal__line--error');
         if (o.at_implemented === false) {

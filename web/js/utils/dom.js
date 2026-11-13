@@ -142,6 +142,14 @@ export function button(label, opts = {}) {
   return node;
 }
 
+/** 过滤副标题中的原始后端 API 接口路径，避免在 UI 暴露诸如 /api/usb/mode 等技术参数 */
+function sanitizeSubtitle(sub) {
+  if (!sub || typeof sub !== 'string') return '';
+  const trimmed = sub.trim();
+  if (/^(?:GET|POST|PUT|DELETE)?\s*\/api\//i.test(trimmed)) return '';
+  return trimmed.replace(/\s*(?:来自\s*)?(?:GET|POST|PUT|DELETE)?\s*\/api\/[a-zA-Z0-9_\-\/]+/gi, '').trim();
+}
+
 /** 卡片：返回 { el, body, head, setTitle }。span 为 12 栏网格中所占列数。 */
 export function card({ title = '', subtitle = '', span = 12, icon: iconName = null, actions = [], className = '' } = {}) {
   const headKids = [];
@@ -149,10 +157,11 @@ export function card({ title = '', subtitle = '', span = 12, icon: iconName = nu
   const textWrap = el('div', { class: 'card__titles' });
   const titleEl = title ? el('h3', { class: 'card__title', text: title }) : null;
   if (titleEl) textWrap.appendChild(titleEl);
-  if (subtitle) textWrap.appendChild(el('p', { class: 'card__subtitle', text: subtitle }));
+  const cleanSub = sanitizeSubtitle(subtitle);
+  if (cleanSub) textWrap.appendChild(el('p', { class: 'card__subtitle', text: cleanSub }));
   headKids.push(textWrap);
   headKids.push(el('div', { class: 'card__actions' }, ...actions));
-  const head = (title || subtitle || iconName || actions.length)
+  const head = (title || cleanSub || iconName || actions.length)
     ? el('div', { class: 'card__head' }, ...headKids)
     : null;
   const body = el('div', { class: 'card__body' });
@@ -164,6 +173,59 @@ export function card({ title = '', subtitle = '', span = 12, icon: iconName = nu
     body,
     head,
     setTitle(text) { if (titleEl) titleEl.textContent = text; }
+  };
+}
+
+/**
+ * 可折叠卡片组件 (Collapsible Card / Accordion)，用于隐藏折叠冗长参数与技术详情
+ * 默认折叠，点击标题栏优雅平滑展开
+ */
+export function collapsibleCard({
+  title = '',
+  subtitle = '',
+  span = 12,
+  icon: iconName = null,
+  open = false,
+  badge = '展开详情',
+  className = ''
+} = {}) {
+  const details = el('details', {
+    class: `card card--collapsible col-span-${span} ${className}`.trim()
+  });
+  if (open) details.setAttribute('open', '');
+
+  const summary = el('summary', { class: 'card__head card__head--summary' });
+  const headKids = [];
+  if (iconName) headKids.push(el('span', { class: 'card__icon' }, icon(iconName)));
+
+  const textWrap = el('div', { class: 'card__titles' });
+  if (title) textWrap.appendChild(el('h3', { class: 'card__title', text: title }));
+  const cleanSub = sanitizeSubtitle(subtitle);
+  if (cleanSub) textWrap.appendChild(el('p', { class: 'card__subtitle', text: cleanSub }));
+  headKids.push(textWrap);
+
+  const actionsWrap = el('div', { class: 'card__actions' });
+  if (badge) actionsWrap.appendChild(el('span', { class: 'badge badge--muted', text: badge }));
+  actionsWrap.appendChild(icon('chevron-down', 'card__chevron'));
+  headKids.push(actionsWrap);
+
+  summary.append(...headKids);
+  const body = el('div', { class: 'card__body card__body--collapse' });
+  details.append(summary, body);
+
+  return {
+    el: details,
+    body,
+    head: summary,
+    toggle(force) {
+      if (typeof force === 'boolean') {
+        if (force) details.setAttribute('open', '');
+        else details.removeAttribute('open');
+      } else {
+        if (details.hasAttribute('open')) details.removeAttribute('open');
+        else details.setAttribute('open', '');
+      }
+    }
   };
 }
 

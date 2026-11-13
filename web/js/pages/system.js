@@ -18,7 +18,7 @@ export function render(container, context) {
   container.appendChild(grid);
 
   // 设备控制
-  const ctrl = ctx.card({ title: '设备控制', subtitle: '/api/device_control', span: 6, icon: 'power' });
+  const ctrl = ctx.card({ title: '设备控制', subtitle: '电源管理与系统维护操作', span: 6, icon: 'power' });
   const rebootBtn = button('重启设备', {
     variant: 'danger', icon: 'refresh',
     onClick: async () => {
@@ -64,7 +64,7 @@ export function render(container, context) {
   grid.appendChild(timeCard.el);
 
   // 定时重启
-  const cronCard = ctx.card({ title: '定时重启', subtitle: '/api/set/reboot', span: 6, icon: 'clock' });
+  const cronCard = ctx.card({ title: '定时重启', subtitle: '按计划自动维护与重启设备', span: 6, icon: 'clock' });
   const days = selectField({
     label: '重启日期', name: 'rday', options: [
       { value: '*', label: '每天' }, { value: '1', label: '周一' }, { value: '2', label: '周二' },
@@ -105,7 +105,7 @@ export function render(container, context) {
   grid.appendChild(cronCard.el);
 
   // 手机壳模式
-  const phoneCard = ctx.card({ title: '手机壳模式', subtitle: '/api/phone-case', span: 6, icon: 'phone' });
+  const phoneCard = ctx.card({ title: '手机壳模式', subtitle: '专用随身配件兼容适配', span: 6, icon: 'phone' });
   const phoneSwitch = switchField({ label: '修复手机壳 USB 无网问题（非手机壳勿开启）', checked: false });
   phoneCard.body.append(
     el('div', { class: 'alert alert--warning', text: '非手机壳设备开启后可能导致 USB 断网 / 网络异常，甚至需要重新刷机恢复。' }),
