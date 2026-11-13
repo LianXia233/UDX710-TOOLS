@@ -36,7 +36,8 @@ Feature completeness was verified with repeatable scripts: **91 legacy C routes,
 - White glassmorphism theme with light / dark / system color schemes.
 - Animated SVG aurora background, live brand mark and pulse wave (CSS + SMIL only, no JS animation loop).
 - Three dialog variants: **Centered Modal Dialog** (desktop default), **Modal Bottom Sheet** (mobile default, draggable grabber), **Right Side Sheet** (logs, JSON details, long forms). Switchable and previewable in Settings.
-- Responsive from 320px to 1920px, landscape phones, tablets and desktops; `100dvh`, `env(safe-area-inset-*)`, 44px touch targets, horizontally scrollable tables.
+- Responsive from 320px to 4K: bottom island navigation below 1240px, compact dock navigation at 1241–1399px, single-column cards on phones, 6-column tablet semantics.
+- Dialogs use `dvh` plus `visualViewport` height / keyboard offset, safe-area insets and internal scrolling, so they never leave the visible viewport; wide tables, code and logs scroll inside their own containers.
 - Strict CSP retained: `script-src 'self'`, `style-src 'self'`, no `unsafe-eval` / `unsafe-inline`.
 
 Full details in [docs/UI.md](docs/UI.md).

@@ -229,6 +229,53 @@ function openAppsCatalog() {
     grid.appendChild(card);
   }
 
+  // 快捷操作卡：窄屏下顶部操作按钮收起后，仍可从「全部功能」完成同样的操作
+  const quickCard = dom.el('div', { class: 'apps-catalog-card' });
+  quickCard.appendChild(dom.el('div', { class: 'apps-catalog-title' },
+    dom.icon('settings'),
+    dom.el('span', { text: i18n.t('app.quickActions') })
+  ));
+  const quickList = dom.el('div', { class: 'apps-catalog-list' });
+  const closeCatalog = () => {
+    if (activeCatalogModal) {
+      activeCatalogModal.close();
+      activeCatalogModal = null;
+    }
+  };
+  const quickActions = [
+    {
+      icon: 'globe',
+      label: i18n.t('app.language'),
+      run: () => { i18n.toggleLocale(); closeCatalog(); }
+    },
+    {
+      icon: effectiveTheme() === 'dark' ? 'sun' : 'moon',
+      label: i18n.t(effectiveTheme() === 'dark' ? 'app.lightMode' : 'app.darkMode'),
+      run: () => { toggleTheme(); }
+    },
+    {
+      icon: 'refresh',
+      label: i18n.t('app.refresh'),
+      run: () => { router.reload(); closeCatalog(); }
+    },
+    {
+      icon: 'log-out',
+      label: i18n.t('app.logout'),
+      run: () => { closeCatalog(); handleLogout(); }
+    }
+  ];
+  for (const action of quickActions) {
+    const btn = dom.el('button', {
+      type: 'button',
+      class: 'apps-catalog-btn',
+      title: action.label
+    }, dom.icon(action.icon), dom.el('span', { text: action.label }));
+    btn.addEventListener('click', action.run);
+    quickList.appendChild(btn);
+  }
+  quickCard.appendChild(quickList);
+  grid.appendChild(quickCard);
+
   activeCatalogModal = openModal({
     title: '5G-MIFI 功能全景中心',
     variant: isMobile ? 'bottom-sheet' : 'center',

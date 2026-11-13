@@ -9,7 +9,7 @@
 import { el, icon, button } from '../utils/dom.js';
 import { t } from '../i18n/index.js';
 import {
-  resolveVariant, applyVariant, addGrabber, dismissDialog
+  resolveVariant, applyVariant, addGrabber, dismissDialog, bindDialogLayout
 } from './dialog-variant.js';
 
 export function openModal({
@@ -115,6 +115,7 @@ export function openModal({
   }
 
   document.body.appendChild(dialog);
+  bindDialogLayout(dialog);
   try {
     dialog.showModal();
   } catch (e) {

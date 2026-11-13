@@ -120,6 +120,61 @@ export function addGrabber(panel, onDismiss) {
 }
 
 /**
+ * 跟踪对话框的可视视口与软键盘高度，写入 --dlg-vvh / --dlg-kb。
+ *
+ * iOS Safari 打开键盘时 layout viewport 不缩放，仅 visualViewport 缩小；
+ * 通过底部偏移让 Bottom Sheet 始终贴在键盘上方，并保证居中弹窗不越界。
+ * 同时锁定页面滚动，关闭后自动释放。
+ */
+const openDialogs = new Set();
+
+export function bindDialogLayout(dialog) {
+  if (!dialog) return () => {};
+  openDialogs.add(dialog);
+  document.documentElement.classList.add('dlg-open');
+
+  const sync = () => {
+    const vv = typeof window !== 'undefined' ? window.visualViewport : null;
+    const vh = vv ? vv.height : window.innerHeight;
+    const kb = vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0;
+    dialog.style.setProperty('--dlg-vvh', `${Math.round(vh)}px`);
+    dialog.style.setProperty('--dlg-kb', `${Math.round(kb)}px`);
+  };
+  sync();
+
+  let raf = 0;
+  const onViewportChange = () => {
+    if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(raf);
+    raf = typeof requestAnimationFrame === 'function'
+      ? requestAnimationFrame(sync)
+      : setTimeout(sync, 16);
+  };
+
+  const vv = typeof window !== 'undefined' ? window.visualViewport : null;
+  if (vv) {
+    vv.addEventListener('resize', onViewportChange);
+    vv.addEventListener('scroll', onViewportChange);
+  }
+  window.addEventListener('orientationchange', onViewportChange);
+
+  let released = false;
+  const release = () => {
+    if (released) return;
+    released = true;
+    if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(raf);
+    if (vv) {
+      vv.removeEventListener('resize', onViewportChange);
+      vv.removeEventListener('scroll', onViewportChange);
+    }
+    window.removeEventListener('orientationchange', onViewportChange);
+    openDialogs.delete(dialog);
+    if (!openDialogs.size) document.documentElement.classList.remove('dlg-open');
+  };
+  dialog.addEventListener('close', release, { once: true });
+  return release;
+}
+
+/**
  * 带退场动画地关闭 dialog。动画结束（或 240ms 兜底）后调用 dialog.close()，
  * 由各组件自身的 close 事件负责 DOM 清理与 Promise resolve。
  * reduced-motion 或动画被禁用时立即关闭。

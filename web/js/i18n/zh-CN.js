@@ -19,6 +19,7 @@ export default {
     connecting: '连接中',
     menu: '展开菜单',
     closeMenu: '收起菜单',
+    quickActions: '快捷操作',
     confirmLogout: '退出登录',
     confirmLogoutMsg: '确定要退出登录吗？退出后需要重新输入密码。',
     collapse: '折叠侧边栏',

@@ -6,7 +6,7 @@
 ![Target](https://img.shields.io/badge/Architecture-aarch64--unknown--linux--musl-orange?style=for-the-badge&logo=linux)
 ![WebUI](https://img.shields.io/badge/WebUI-Vanilla%20HTML5%20%2B%20ESM-teal?style=for-the-badge&logo=html5)
 ![Device](https://img.shields.io/badge/Device-UNISOC%20UDX710%205G-red?style=for-the-badge&logo=5g)
-![License](https://img.shields.io/badge/License-MIT%2FApache-green?style=for-the-badge)
+![License](https://img.shields.io/badge/License-GPLv3-blue?style=for-the-badge&logo=gnu)
 
 <p align="center">
   <b>专为紫光展锐 UNISOC UDX710 (V510) 5G 模组与随身 WiFi / CPE 打造的新一代高密度、零依赖、嵌入式管理系统</b>
@@ -71,6 +71,12 @@
   1. **后端独立 OS 线程**：秒级探测 Tokio 异步运行时假死，自动重启自愈；
   2. **前端主线程心跳漂移检测**：侦测浏览器事件循环阻塞并告警自愈；
   3. **前端网络健康探针**：监测与后端连接状态并在断联后自动重建 WebSocket/SSE。
+
+### 📱 全场景响应式与移动端适配
+- **320px ~ 4K 全分辨率覆盖**：针对 320 / 360 / 375 / 390 / 414 手机、768 / 1024 平板、1280 / 1440 笔记本与 2K/4K 桌面分别校准栅格、间距与字号。
+- **移动端岛式底部导航**：窄屏自动收起顶部菜单为抽屉入口，底部保留 5 个高频入口；1280 级笔记本压缩顶部导航密度，避免菜单挤压与截断。
+- **弹窗安全视口**：基于 `dvh` 与 `visualViewport` 计算最大高度和键盘偏移，弹窗始终位于可视区域；内容区独立滚动，标题栏与操作栏固定，适配刘海、手势区与软键盘。
+- **内容零横向溢出**：表格、代码、日志与长 IPv6 / URL 在容器内部滚动或安全换行，页面不产生非预期横向滚动条。
 
 ---
 
@@ -156,5 +162,8 @@ chmod +x server start.sh
 
 ## 📜 许可证与贡献
 
-- 核心代码基于 **MIT License / Apache 2.0 双协议** 开源。
-- 欢迎提交 Issue 与 Pull Request 共同完善对更多 UNISOC 展锐 5G/4G 模组的适配！
+- 本项目基于 **GNU General Public License v3.0 (GPLv3)** 开源，完整条款见 [LICENSE](LICENSE)。
+- 你可以自由使用、修改与分发；分发时必须保留版权声明、公开对应源码，并以同等许可证授权。闭源商用与重新授权不被允许。
+- 欢迎通过 [Issues](https://github.com/LianXia233/UDX710-TOOLS/issues) 反馈缺陷与适配需求，通过 [Pull Requests](https://github.com/LianXia233/UDX710-TOOLS/pulls) 提交改进。
+- 提交代码前请先运行现有测试与契约脚本（见 [tests/README.md](tests/README.md)），并确保 WebUI 在手机与桌面视口下无布局回归。
+- 交流群：QQ 群 **1029148488**。

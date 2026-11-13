@@ -384,7 +384,7 @@
 
 .panorama-matrix {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(130px, 100%), 1fr));
   gap: 10px;
 }
 
@@ -445,7 +445,7 @@
 /* ============ 系统遥测网格 (System Telemetry Grid) ============ */
 .telemetry-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));
   gap: 12px;
 }
 
@@ -521,7 +521,7 @@
 /* ============ 调制解调器射频状态药丸 (RF Stat Pills) ============ */
 .rf-stats-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(130px, 100%), 1fr));
   gap: 10px;
   margin-bottom: 14px;
 }
@@ -649,7 +649,8 @@
 
 .speed-card__totals {
   display: flex;
-  gap: 16px;
+  flex-wrap: wrap;
+  gap: 6px 16px;
   font-size: 11.5px;
   color: var(--text-muted);
   margin-top: 4px;
@@ -748,10 +749,54 @@
   background: rgba(30, 41, 59, 0.75);
 }
 
+/* 手机端：HUD 脱离绝对定位，改为上下自然排列，避免徽标与波形、指标互相遮挡 */
+@media (max-width: 768px) {
+  .cellular-hologram-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding: 10px;
+    min-height: 0;
+  }
+  .cellular-hologram-wrap .cellular-hologram-svg {
+    height: 110px;
+    order: 0;
+  }
+  .cellular-hologram-wrap .holo-hud {
+    position: static;
+    left: auto;
+    right: auto;
+    justify-content: flex-start;
+    gap: 6px;
+  }
+  .cellular-hologram-wrap .holo-hud--top { order: -1; }
+  .cellular-hologram-wrap .holo-hud--bottom {
+    order: 1;
+    justify-content: flex-start;
+    gap: 6px;
+  }
+  .cellular-hologram-wrap .holo-badge {
+    max-width: 100%;
+    min-width: 0;
+    padding: 3px 8px;
+    font-size: 10.5px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .cellular-hologram-wrap .holo-stat-pill {
+    max-width: 100%;
+    padding: 2px 8px;
+    font-size: 10px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}
+
 /* ============ 射频指标线性量程条卡片 (RF Range Bar Card) ============ */
 .rf-bars-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr));
   gap: 12px;
   margin-bottom: var(--space-4);
 }
@@ -839,7 +884,7 @@
 /* 环形仪表盘网格与单项 */
 .gauge-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(110px, 100%), 1fr));
   gap: var(--space-3);
   margin-bottom: var(--space-3);
 }
@@ -880,54 +925,6 @@
   height: 160px;
   display: block;
   overflow: visible;
-}
-
-/* ============ 手机底部导航栏（Bottom Nav） ============ */
-.bottom-nav {
-  display: none;
-  position: fixed;
-  left: 12px;
-  right: 12px;
-  bottom: calc(10px + env(safe-area-inset-bottom, 0px));
-  height: 60px;
-  border-radius: 20px;
-  z-index: 50;
-  padding: 0 8px;
-  align-items: center;
-  justify-content: space-around;
-  border: 1px solid var(--glass-border);
-  box-shadow: 0 10px 30px rgba(15, 35, 75, 0.12), inset 0 1px 1px #fff;
-}
-
-.bottom-nav__item {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
-  height: 48px;
-  border-radius: 14px;
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 600;
-  transition: all 0.2s ease;
-}
-
-.bottom-nav__item .icon {
-  width: 20px;
-  height: 20px;
-}
-
-.bottom-nav__item.is-active {
-  color: var(--primary);
-  background: rgba(37, 99, 235, 0.12);
-  font-weight: 700;
-}
-
-.bottom-nav__item.is-active .icon {
-  transform: scale(1.1);
-  color: var(--primary);
 }
 
 /* ============ 登录页毛玻璃卡片与动态视觉 ============ */
@@ -1016,8 +1013,8 @@
 }
 
 .login-pwd-input {
-  padding-left: 38px !important;
-  padding-right: 42px !important;
+  padding-left: 38px;
+  padding-right: 42px;
   height: 44px;
 }
 

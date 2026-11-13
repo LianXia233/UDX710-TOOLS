@@ -1,35 +1,69 @@
 /**
  * responsive.css —— 全分辨率适配层（必须最后加载）。
  *
- * 覆盖规格：
+ * 适配规格：
  *  - 超窄屏与折叠外屏 (320px - 360px)
  *  - 主流手机竖屏 (375px / 390px / 414px / 430px)
  *  - 平板与折叠内屏 (600px - 1024px)
- *  - 笔记本与台式机标准屏 (1280px - 1440px)
- *  - 2K / 4K 超宽屏 (>= 1920px)
- *  - 刘海与灵动岛全安全区适配 (env(safe-area-inset-*))
- *  - 动态视口高度 (100dvh) 彻底消除移动端浏览器地址栏伸缩抖动
+ *  - 笔记本与台式机 (1201px - 1440px)
+ *  - 2K / 4K 超宽屏 (>= 1441px)
+ *  - 刘海与灵动岛安全区 (env(safe-area-inset-*))
+ *  - 动态视口高度 (dvh) 与软键盘可视视口 (--dlg-vvh / --dlg-kb)
+ *
+ * 原则：Mobile First 的覆盖层，只调整布局结构与尺寸，不隐藏业务内容。
  */
 
-/* ============ 基础：全视口高度与安全区 ============ */
-.app-shell {
-  min-height: 100vh;
-  min-height: 100dvh;
+/* ============ 基础：全局防溢出与安全区 ============ */
+html,
+body {
+  max-width: 100%;
+  overflow-x: clip;
 }
-.login-screen {
-  min-height: 100vh;
-  min-height: 100dvh;
+
+img,
+svg,
+canvas,
+video {
+  max-width: 100%;
+}
+
+.main,
+.page,
+.page-content,
+.page-grid,
+.card,
+.card__body,
+.kv,
+.row,
+.toolbar,
+.modal__body,
+.confirm__body,
+.modal__panel,
+.confirm__panel {
+  min-width: 0;
+  max-width: 100%;
+}
+
+pre {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+pre,
+code {
+  overflow-wrap: anywhere;
+}
+
+.mono {
+  overflow-wrap: anywhere;
+}
+
+.watchdog-banner {
+  max-width: calc(100% - 24px);
 }
 
 .header-dock {
   padding-top: calc(var(--space-3) + env(safe-area-inset-top, 0px));
-  padding-left: calc(var(--space-3) + env(safe-area-inset-left, 0px));
-  padding-right: calc(var(--space-3) + env(safe-area-inset-right, 0px));
-}
-
-.page {
-  padding-bottom: calc(var(--space-6) + env(safe-area-inset-bottom, 0px));
-  max-width: 100%;
 }
 
 .toast-stack {
@@ -41,38 +75,58 @@
   bottom: calc(22px + env(safe-area-inset-bottom, 0px));
 }
 
-/* 防止大图、长文本撑破弹性盒 */
-.main, .page, .card, .card__body, .modal__body, .confirm__body {
-  min-width: 0;
-  max-width: 100%;
-}
-pre, code, .mono {
-  max-width: 100%;
-  overflow-wrap: anywhere;
-}
-.table-wrap {
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior-x: contain;
-}
-
-/* ============ 触控设备交互优化 (44px 黄金点击区) ============ */
+/* ============ 触控设备交互优化 (44px 触控区) ============ */
 @media (hover: none) and (pointer: coarse) {
-  .nav__item, .bottom-nav__item {
+  .bottom-nav__item {
     min-height: 44px;
   }
-  .btn, .icon-btn, .modal__x, .topbar__menu,
-  .sidebar__toggle, .page__head .btn {
+  .btn,
+  .icon-btn,
+  .modal__x,
+  .dlg__grabber {
     min-height: 44px;
+  }
+  .icon-btn,
+  .modal__x {
     min-width: 44px;
   }
-  .dlg__grabber {
-    height: 42px;
-    min-height: 42px;
-  }
-  /* 触控端取消 hover 位移，避免点按粘滞 */
   .card:hover { transform: none; }
   .btn:hover { transform: none; }
+}
+
+/* ============ 中等宽度：顶部导航折叠，启用底部岛式导航 (<= 1240px) ============ */
+@media (max-width: 1240px) {
+  .dock-nav {
+    display: none;
+  }
+  .dock-menu-toggle {
+    display: inline-flex;
+  }
+  .dock-clock {
+    display: none;
+  }
+  .bottom-nav {
+    display: flex;
+  }
+  .page-content {
+    padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+  }
+  .watchdog-banner {
+    bottom: calc(78px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* ============ 小笔记本：压缩顶部导航密度，保留完整菜单 (1241px - 1399px) ============ */
+@media (min-width: 1241px) and (max-width: 1399px) {
+  .dock-nav {
+    gap: 2px;
+    padding: 3px;
+  }
+  .dock-nav-item {
+    padding: 6px 7px;
+    gap: 4px;
+    font-size: 12.5px;
+  }
 }
 
 /* ============ 手机屏幕 (<= 768px) ============ */
@@ -88,115 +142,263 @@ pre, code, .mono {
     grid-column: 1 / -1;
   }
 
-  /* 顶部悬浮岛适配 */
+  /* 顶部悬浮岛 */
   .header-dock {
-    padding-left: var(--space-2);
-    padding-right: var(--space-2);
+    padding-left: calc(var(--space-2) + env(safe-area-inset-left, 0px));
+    padding-right: calc(var(--space-2) + env(safe-area-inset-right, 0px));
   }
   .header-dock__inner {
-    padding: 6px 12px;
+    padding: 6px 10px;
+    gap: 8px;
     border-radius: var(--radius-lg);
   }
-  .dock-nav {
-    display: none; /* 移动端由底部悬浮岛负责导航 */
+  .dock-brand {
+    gap: 8px;
   }
-  .dock-menu-toggle {
-    display: inline-flex;
+  .dock-brand__logo {
+    width: 32px;
+    height: 34px;
   }
-  .dock-clock {
-    display: none;
+  .dock-brand__logo .brand__live {
+    width: 28px;
+    height: 28px;
+  }
+  .dock-brand__title-row h1 {
+    font-size: 15px;
   }
 
-  /* 页面容器内边距留出底部导航区 */
+  /* 页面容器：左右留白 + 底部导航安全距离 */
+  .page-content {
+    padding: var(--space-2) var(--space-2) calc(84px + env(safe-area-inset-bottom, 0px));
+  }
   .page {
     padding-left: var(--space-2);
     padding-right: var(--space-2);
     padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px));
   }
-
   .page__head {
     flex-direction: column;
     align-items: flex-start;
     gap: 8px;
     margin-bottom: var(--space-3);
   }
-
-  /* 手机底部常驻导航条开启 */
-  .bottom-nav {
-    display: flex;
+  .page__title {
+    font-size: 19px;
+  }
+  .page__desc {
+    font-size: 12.5px;
   }
 
-  /* 看门狗胶囊上移避开底部导航栏 */
-  .watchdog-banner {
-    bottom: calc(78px + env(safe-area-inset-bottom, 0px));
-  }
-
-  /* 仪表盘与雷达组件手机紧凑布局 */
-  .hero-radar-svg {
-    height: 140px;
-  }
-  .hero-radar-overlay {
-    top: 8px;
-    left: 10px;
-    right: 10px;
-  }
-  .hero-radar-badge {
-    font-size: 11px;
-    padding: 3px 8px;
-  }
-  .hero-radar-stat {
-    font-size: 10px;
-    padding: 2px 6px;
-  }
-
-  /* 仪表盘环形仪表手机 2 列流动 */
-  .gauge-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--space-2);
-  }
-  .svg-gauge-box {
-    padding: 8px 4px;
-  }
-
-  /* 表单单列防挤压 */
-  .form-grid, .field-row {
+  /* 表单：单列并避免 iOS 聚焦缩放 */
+  .form-grid,
+  .field-row {
     grid-template-columns: 1fr;
     display: grid;
     gap: 10px;
   }
-  .input, .select, textarea.input {
-    font-size: 16px; /* 16px 避免 iOS Safari 聚焦时页面放大 */
+  .input,
+  .select,
+  textarea.input,
+  .terminal__input,
+  .login-pwd-input {
+    font-size: 16px;
+  }
+  .select {
+    padding-right: 32px;
   }
 
-  /* 弹窗在手机下的尺寸 */
+  /* 网格密度 */
+  .telemetry-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .telemetry-tile {
+    padding: 10px 12px;
+  }
+  .rf-stats-row,
+  .gauge-grid {
+    gap: 8px;
+  }
+  .throughput-grid {
+    gap: 10px;
+  }
+  .speed-card {
+    padding: 14px;
+  }
+  .speed-card__rate {
+    font-size: clamp(24px, 7.5vw, 32px);
+  }
+  .speed-card__head {
+    gap: 8px;
+  }
+  .speed-card__label {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  /* 表格：容器内滚动，降低单行高度 */
+  .table {
+    font-size: 12.5px;
+  }
+  .table th,
+  .table td {
+    padding: 8px 10px;
+  }
+
+  /* 卡片 */
+  .card__head {
+    row-gap: 6px;
+  }
+  .card__title {
+    font-size: 14px;
+  }
+  .card__actions {
+    gap: 6px;
+  }
+
+  /* 终端 */
+  .terminal__screen {
+    height: min(440px, 55dvh);
+    min-height: 240px;
+    padding: 12px;
+    font-size: 12.5px;
+  }
+  .terminal__input-row {
+    padding: 8px 12px;
+  }
+  .terminal__bar {
+    padding: 8px 12px;
+  }
+
+  /* 弹窗：适配手机可视宽度与动态高度 */
   dialog.dlg--center {
     width: calc(100vw - 24px);
     max-width: calc(100vw - 24px);
-    max-height: 88dvh;
-    border-radius: 24px;
+    max-height: min(88dvh, calc(var(--dlg-vvh, 100dvh) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 16px));
+    border-radius: 20px;
+  }
+  dialog.dlg--center .modal__panel,
+  dialog.dlg--center .confirm__panel {
+    max-height: min(88dvh, calc(var(--dlg-vvh, 100dvh) - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 16px));
   }
   dialog.dlg--bottom-sheet {
-    max-height: 94dvh;
+    max-height: min(92dvh, calc(var(--dlg-vvh, 100dvh) - env(safe-area-inset-top, 0px) - 8px));
   }
-  /* 移动端侧边抽屉自动转为底部抽屉形态 */
+  dialog.dlg--bottom-sheet .modal__panel,
+  dialog.dlg--bottom-sheet .confirm__panel {
+    max-height: min(92dvh, calc(var(--dlg-vvh, 100dvh) - env(safe-area-inset-top, 0px) - 8px));
+  }
+  /* 移动端侧边抽屉退化为底部抽屉 */
   dialog.dlg--side-sheet {
     inset: auto 0 0 0;
-    width: 100vw;
+    width: 100%;
+    max-width: 100%;
     height: fit-content;
-    max-height: 94dvh;
-    border-radius: 28px 28px 0 0;
+    max-height: min(92dvh, calc(var(--dlg-vvh, 100dvh) - env(safe-area-inset-top, 0px) - 8px));
+    border-radius: 24px 24px 0 0;
     border-right: 0;
     border-left: 0;
     border-bottom: 0;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
     animation: dlg-sheet-up 0.32s cubic-bezier(0.16, 1, 0.3, 1) both;
   }
+  dialog.dlg--side-sheet .modal__panel,
+  dialog.dlg--side-sheet .confirm__panel {
+    height: auto;
+    max-height: inherit;
+  }
+  dialog.dlg .modal__head,
+  dialog.dlg .confirm__head {
+    padding: 14px 16px;
+  }
+  dialog.dlg .modal__body,
+  dialog.dlg .confirm__body {
+    padding: 16px;
+  }
+  dialog.dlg .modal__foot,
+  dialog.dlg .confirm__foot {
+    padding: 12px 16px;
+  }
 
-  /* Toast 浮层居中贴顶 */
+  /* Toast 浮层铺满顶部安全区 */
   .toast-stack {
-    left: 14px;
-    right: 14px;
-    top: calc(14px + env(safe-area-inset-top, 0px));
+    left: 12px;
+    right: 12px;
+    top: calc(12px + env(safe-area-inset-top, 0px));
     max-width: none;
+  }
+
+  /* 登录页允许纵向滚动，避免短屏裁切 */
+  .login-screen {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    justify-content: flex-start;
+    padding: calc(64px + env(safe-area-inset-top, 0px)) calc(16px + env(safe-area-inset-right, 0px)) calc(24px + env(safe-area-inset-bottom, 0px)) calc(16px + env(safe-area-inset-left, 0px));
+  }
+  .login-card {
+    margin: auto;
+    flex-shrink: 0;
+  }
+  .login-hero-img {
+    width: 150px;
+  }
+  .login-card__head {
+    padding: 24px 20px 10px;
+  }
+  .login-card__body {
+    padding: 14px 20px 22px;
+  }
+  .login-card__foot {
+    flex-wrap: wrap;
+    text-align: center;
+  }
+}
+
+/* ============ 窄屏手机 (<= 560px) ============ */
+@media (max-width: 560px) {
+  /* 快捷操作转入「全部功能」目录，避免顶部栏横向溢出 */
+  .dock-actions-btns {
+    display: none;
+  }
+  .dock-status-chip {
+    max-width: 104px;
+  }
+  .dock-brand__text p {
+    display: none;
+  }
+
+  .modal__foot .btn,
+  .confirm__foot .btn {
+    flex: 1 1 120px;
+  }
+  .pager {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    row-gap: 8px;
+  }
+  .pager__info {
+    flex: 1 1 100%;
+  }
+  .pager__spacer {
+    display: none;
+  }
+  .pager__label,
+  .pager__size {
+    flex: 0 0 auto;
+  }
+  .pager .btn {
+    flex: 1 1 64px;
+    min-height: 40px;
+  }
+  .apps-catalog-card {
+    padding: var(--space-3);
+  }
+  .apps-catalog-list {
+    gap: 6px;
+  }
+  .apps-catalog-btn {
+    padding: 8px 10px;
+    font-size: 12.5px;
   }
 }
 
@@ -208,9 +410,6 @@ pre, code, .mono {
     --radius-card: 16px;
     --radius-lg: 20px;
   }
-  .brand {
-    padding: 12px;
-  }
   .card {
     padding: 12px;
   }
@@ -218,22 +417,44 @@ pre, code, .mono {
     padding: 6px 10px;
     font-size: 12px;
   }
+  .dock-status-chip {
+    padding: 4px 8px;
+  }
+  .dock-status-chip .status-light__label {
+    display: none;
+  }
+  .bottom-nav {
+    width: calc(100% - 16px);
+    height: 54px;
+  }
+  .bottom-nav__item span {
+    font-size: 10px;
+  }
+  .apps-catalog-list {
+    grid-template-columns: 1fr;
+  }
   .gauge-grid {
     grid-template-columns: 1fr;
   }
-  .bottom-nav {
-    height: 54px;
+  .telemetry-grid {
+    gap: 8px;
   }
-  .bottom-nav__item {
-    font-size: 10px;
+  .telemetry-tile {
+    padding: 9px 10px;
+  }
+  .telemetry-tile__num {
+    font-size: 18px;
+  }
+  .login-hero-img {
+    width: 120px;
+  }
+  .login-card__title {
+    font-size: 20px;
   }
 }
 
-/* ============ 平板与中等屏幕 (769px - 1024px) ============ */
+/* ============ 平板与中屏 (769px - 1024px) ============ */
 @media (min-width: 769px) and (max-width: 1024px) {
-  :root {
-    --sidebar-w: 216px;
-  }
   .page-grid {
     grid-template-columns: repeat(6, minmax(0, 1fr));
     gap: var(--space-3);
@@ -245,9 +466,6 @@ pre, code, .mono {
 
   dialog.dlg--side-sheet {
     width: min(var(--dlg-width, 480px), 70vw);
-  }
-  .topbar__clock {
-    display: none;
   }
 }
 
@@ -263,14 +481,6 @@ pre, code, .mono {
 
 /* ============ 大屏与 2K/4K (>= 1441px) ============ */
 @media (min-width: 1441px) {
-  .page, .topbar__inner {
-    max-width: 1620px;
-    margin-left: auto;
-    margin-right: auto;
-  }
-  .page__title {
-    font-size: 22px;
-  }
   dialog.dlg--center {
     width: min(var(--dlg-width, 640px), 44vw);
   }
@@ -279,41 +489,46 @@ pre, code, .mono {
   }
 }
 
-/* ============ 手机横屏 (矮视口) ============ */
+/* ============ 手机横屏（矮视口） ============ */
 @media (max-height: 500px) and (orientation: landscape) {
-  .sidebar {
-    width: 220px;
-    flex-basis: 220px;
+  .bottom-nav {
+    display: none;
   }
-  .brand {
-    min-height: 52px;
-    padding: 8px 14px;
-  }
-  .topbar {
-    padding-top: calc(4px + env(safe-area-inset-top, 0px));
-    padding-bottom: 4px;
-  }
-  .topbar__inner {
-    min-height: 46px;
-    padding: 4px 12px;
-  }
+  .page-content,
   .page {
     padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
   }
-  .bottom-nav {
-    display: none !important;
+  .watchdog-banner {
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
   }
-  dialog.dlg--center { max-height: 94dvh; }
-  dialog.dlg--bottom-sheet { max-height: 94dvh; }
+  dialog.dlg--center {
+    max-height: calc(var(--dlg-vvh, 100dvh) - 12px);
+  }
+  dialog.dlg--bottom-sheet,
+  dialog.dlg--side-sheet {
+    max-height: calc(var(--dlg-vvh, 100dvh) - 8px);
+  }
+  .login-screen {
+    padding-top: calc(52px + env(safe-area-inset-top, 0px));
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+  .login-hero-img {
+    display: none;
+  }
 }
 
-/* 横屏左右安全区 */
+/* ============ 横屏左右安全区 ============ */
 @media (orientation: landscape) {
+  .page-content,
   .page {
-    padding-left: calc(var(--space-4) + env(safe-area-inset-left, 0px));
-    padding-right: calc(var(--space-4) + env(safe-area-inset-right, 0px));
+    padding-left: calc(var(--space-2) + env(safe-area-inset-left, 0px));
+    padding-right: calc(var(--space-2) + env(safe-area-inset-right, 0px));
   }
-  .topbar {
+}
+
+@media (orientation: landscape) and (min-width: 769px) {
+  .page-content,
+  .page {
     padding-left: calc(var(--space-4) + env(safe-area-inset-left, 0px));
     padding-right: calc(var(--space-4) + env(safe-area-inset-right, 0px));
   }

@@ -19,6 +19,7 @@ export default {
     connecting: 'Connecting',
     menu: 'Open menu',
     closeMenu: 'Close menu',
+    quickActions: 'Quick actions',
     confirmLogout: 'Log out',
     confirmLogoutMsg: 'Are you sure you want to log out? You will need the password again.',
     collapse: 'Collapse sidebar',

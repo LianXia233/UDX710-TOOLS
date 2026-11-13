@@ -111,7 +111,7 @@ export function render(container, context) {
   const presetGrid = el('div', {
     class: 'rf-stats-row',
     style: {
-      gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+      gridTemplateColumns: 'repeat(auto-fit, minmax(min(220px, 100%), 1fr))',
       gap: '12px'
     }
   });

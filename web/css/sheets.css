@@ -12,6 +12,8 @@
 /* ---------- 全局对话框玻璃外壳 ---------- */
 dialog.dlg {
   padding: 0;
+  max-width: 100vw;
+  max-height: 100dvh;
   border: 1px solid var(--glass-border);
   background: var(--surface-elevated);
   -webkit-backdrop-filter: blur(var(--glass-blur-lg)) saturate(185%);
@@ -20,6 +22,15 @@ dialog.dlg {
   overflow: hidden;
   box-shadow: var(--glass-shadow-modal);
   outline: none;
+}
+
+/* 移动端弹窗打开期间锁定页面滚动，避免背景跟随滑动；
+   桌面端保留原生滚动条，避免锁定造成页面横向跳动 */
+@media (max-width: 768px) {
+  html.dlg-open,
+  html.dlg-open body {
+    overflow: hidden;
+  }
 }
 
 dialog.dlg .modal__panel,
@@ -33,6 +44,7 @@ dialog.dlg .confirm__panel {
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
   width: 100%;
+  min-width: 0;
   height: 100%;
 }
 
@@ -42,6 +54,7 @@ dialog.dlg .confirm__head {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 10px;
   padding: 18px 22px;
   border-bottom: 1px solid var(--glass-border-subtle);
   background: rgba(255, 255, 255, 0.35);
@@ -57,12 +70,25 @@ dialog.dlg .confirm__title {
   font-size: 16.5px;
   font-weight: 700;
   letter-spacing: -0.01em;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* 确认框没有关闭按钮，图标与标题应左对齐成组 */
+dialog.dlg .confirm__head {
+  justify-content: flex-start;
+  gap: 10px;
+}
+
+dialog.dlg .confirm__title {
+  flex: 1 1 auto;
 }
 
 dialog.dlg .modal__body,
 dialog.dlg .confirm__body {
   flex: 1 1 auto;
   min-height: 0;
+  min-width: 0;
   overflow-y: auto;
   overflow-x: hidden;
   padding: 22px;
@@ -76,7 +102,8 @@ dialog.dlg .confirm__foot {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: var(--space-3);
+  flex-wrap: wrap;
+  gap: var(--space-2);
   padding: 16px 22px;
   border-top: 1px solid var(--glass-border-subtle);
   background: rgba(255, 255, 255, 0.45);
@@ -91,6 +118,7 @@ dialog.dlg .confirm__foot {
 dialog.dlg .modal__x {
   width: 36px;
   height: 36px;
+  flex-shrink: 0;
   border-radius: var(--radius-sm);
   display: inline-flex;
   align-items: center;
@@ -112,18 +140,18 @@ dialog.dlg .modal__x:hover {
    ========================================================= */
 dialog.dlg--center {
   position: fixed;
-  inset: 0;
+  inset: 0 0 var(--dlg-kb, 0px) 0;
   margin: auto;
   width: min(var(--dlg-width, 580px), calc(100vw - 36px));
   max-width: calc(100vw - 36px);
   height: fit-content;
-  max-height: min(86dvh, 880px);
+  max-height: min(86dvh, calc(var(--dlg-vvh, 100dvh) - 24px), 880px);
   border-radius: var(--radius-lg);
 }
 
 dialog.dlg--center .modal__panel,
 dialog.dlg--center .confirm__panel {
-  max-height: min(86dvh, 880px);
+  max-height: min(86dvh, calc(var(--dlg-vvh, 100dvh) - 24px), 880px);
 }
 
 dialog.dlg--center[open] {
@@ -139,22 +167,23 @@ dialog.dlg--center[open].is-closing {
    ========================================================= */
 dialog.dlg--bottom-sheet {
   position: fixed;
-  inset: auto 0 0 0;
+  inset: auto 0 var(--dlg-kb, 0px) 0;
   margin: 0;
   width: 100%;
   max-width: 100%;
   height: fit-content;
-  max-height: 94dvh;
+  max-height: min(94dvh, calc(var(--dlg-vvh, 100dvh) - env(safe-area-inset-top, 0px) - 8px));
   border-radius: 28px 28px 0 0;
   border-bottom: 0;
   border-left: 0;
   border-right: 0;
   padding-bottom: env(safe-area-inset-bottom, 0px);
+  transition: bottom 0.18s ease;
 }
 
 dialog.dlg--bottom-sheet .modal__panel,
 dialog.dlg--bottom-sheet .confirm__panel {
-  max-height: 94dvh;
+  max-height: min(94dvh, calc(var(--dlg-vvh, 100dvh) - env(safe-area-inset-top, 0px) - 8px));
 }
 
 dialog.dlg--bottom-sheet .modal__foot,
@@ -227,12 +256,14 @@ dialog.dlg--side-sheet {
   border-right: 0;
   border-top: 0;
   border-bottom: 0;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 dialog.dlg--side-sheet .modal__panel,
 dialog.dlg--side-sheet .confirm__panel {
   height: 100%;
-  max-height: 100dvh;
+  max-height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
 }
 
 dialog.dlg--side-sheet[open] {
