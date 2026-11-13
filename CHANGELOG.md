@@ -8,6 +8,17 @@
 
 ## [Unreleased]
 
+## [3.0.1] - 2026-11-13（OTA 发布闭环）
+
+### Fixed / Changed（OTA 信任门禁、tag 自动发布与归档解析测试）
+
+- **修复 OTA 安装被签名门禁误拦**：`require_signature=true`（默认）时，旧实现无条件要求 `signature` 字段，导致已经通过官方 `SHA256SUMS` 校验的 CI Release 包也无法安装。现在 `download()` 在 `update_state.last_error` 写入信任标记 `sha256:release-sums` 并透传到 `extract()`；`install()` 仅在「信任标记存在 + 包摘要与记录摘要一致」时跳过签名门禁，本地 `upload()` 路径仍强制签名，避免任意本地包绕过校验。响应新增 `trust` 字段标明来源（`release-sha256sums` / `signature`）。
+- **修复 tag 不触发 Release**：`build.yml` 的 `on.push` 原先只有 `branches: [main]`，GitHub Actions 的分支过滤不含 tag 推送，打 `v*` tag 时整个 workflow 不会触发，`release` job 永远跳过。已补 `tags: ["v*"]`（paths 过滤对 tag 推送不生效）。
+- **加固安装目标解析**：`install()` 改用 `std::env::current_exe()` 并剥离 Linux 在可执行文件被 rename 后追加的 `(deleted)` 后缀，避免二次安装写到错误文件名。
+- **归档解析单元测试**：tar 扫描抽为纯函数 `locate_server_in_tar`，新增 4 项测试覆盖 CI 布局（`6677/server`）、扁平布局、NUL typeflag、缺 server 归档与损坏 gzip；`cargo test -p udx-services --lib` 20 项全通过。
+- **版本号**：workspace `3.0.0` → `3.0.1`，与 `v3.0.1` Release tag 对齐，安装后 `/api/update/check` 可正确判定「已是最新版本」。
+- **文档**：本文件同步记录；`README` 中的 OTA 使用说明以本版本为准。
+
 ### Fixed / Changed（2026-11-13 PCI 解析纠错、CI 构建修复与 OTA 自更新链路适配 6677 后台）
 
 - **服务小区与基站测量矩阵 PCI 解析纠错**：

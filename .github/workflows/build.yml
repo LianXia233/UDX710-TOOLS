@@ -23,6 +23,10 @@ name: Build UDX710 Tools
 on:
   push:
     branches: [main]
+    # 必须显式声明 tags：GitHub Actions 的 branches 过滤不含 tag 推送，
+    # 否则打 v* tag 时整个 workflow 不会触发，release job 也就永远不会执行。
+    # paths 过滤对 tag 推送不生效，无需额外处理。
+    tags: ["v*"]
     paths-ignore:
       - "docs/**"
       - "**/*.md"

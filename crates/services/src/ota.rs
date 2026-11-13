@@ -29,6 +29,10 @@ const BINARY_ENTRY: &str = "server";
 /// 无 payload.sha256_url 时的摘要清单兜底地址（CI Release 固定资产）。
 const SHA256SUMS_URL_FALLBACK: &str =
     "https://github.com/LianXia233/UDX710-TOOLS/releases/latest/download/SHA256SUMS";
+/// 摘要来自 Release 的 SHA256SUMS 时的信任标记，写入 update_state.last_error 列。
+/// install() 仅在摘要一致且此标记存在时跳过 require_signature 门禁；
+/// 本地 upload() 路径不带此标记，仍强制签名，避免任意本地包绕过校验。
+const TRUST_MARKER: &str = "sha256:release-sums";
 
 pub struct OtaService {
     db: Db,
@@ -304,9 +308,15 @@ impl OtaService {
         let path = self.package_dir.join(&name);
         atomic_write(&path, &buf).await?;
         self.db
-            .update_state_set(env!("CARGO_PKG_VERSION"), "downloaded", &path.to_string_lossy(), &digest, "")
+            .update_state_set(
+                env!("CARGO_PKG_VERSION"),
+                "downloaded",
+                &path.to_string_lossy(),
+                &digest,
+                TRUST_MARKER,
+            )
             .await?;
-        Ok(json!({"status": "ok", "size": buf.len(), "sha256": digest}))
+        Ok(json!({"status": "ok", "size": buf.len(), "sha256": digest, "trust": "release-sha256sums"}))
     }
 
     /// 解包：摘要复核 + gzip/tar 归档展开。
@@ -329,6 +339,8 @@ impl OtaService {
         if !expected.is_empty() && digest != expected {
             return Err(bad_request("更新包摘要复核失败"));
         }
+        // 保留 download 阶段写入的信任标记，供 install 阶段判断来源。
+        let trust = udx_storage::row_str(&state, "last_error");
 
         // 依据魔数判别 gzip 归档（1f 8b），其余按纯二进制处理。
         if bytes.len() > 2 && bytes[0] == 0x1f && bytes[1] == 0x8b {
@@ -350,7 +362,7 @@ impl OtaService {
                     "extracted",
                     &bin_path.to_string_lossy(),
                     &bin_digest,
-                    "",
+                    if trust == TRUST_MARKER { TRUST_MARKER } else { "" },
                 )
                 .await?;
             return Ok(json!({
@@ -363,19 +375,31 @@ impl OtaService {
         }
 
         self.db
-            .update_state_set(env!("CARGO_PKG_VERSION"), "extracted", &path.to_string_lossy(), &digest, "")
+            .update_state_set(
+                env!("CARGO_PKG_VERSION"),
+                "extracted",
+                &path.to_string_lossy(),
+                &digest,
+                if trust == TRUST_MARKER { TRUST_MARKER } else { "" },
+            )
             .await?;
         Ok(json!({"status": "ok", "sha256": digest, "note": "纯二进制包，解包不执行包内脚本"}))
     }
 
     /// 从 gzip+tar 归档中提取 `server` 可执行文件字节。
-    /// 手工解 tar 头（512 字节块），避免引入 tar/gzip 依赖增加二进制体积。
+    /// 手工解 tar 头（512 字节块），避免引入 tar 依赖增加二进制体积。
     async fn extract_server_from_targz(&self, gz: &[u8]) -> AppResult<Vec<u8>> {
         let tar_bytes = Self::gunzip(gz)?;
-        // tar 条目名可能是 "server" 或 "6677/server"（CI 打包时 -C dist 6677）。
+        Self::locate_server_in_tar(&tar_bytes)
+    }
+
+    /// 扫描 tar 字节流，定位名为 `server` 的普通文件条目。
+    /// 兼容 "server" 与 "6677/server"（CI 打包时 -C dist 6677）两种路径，
+    /// 跳过目录 / PAX 扩展头 / 长名条目等非普通文件类型。
+    fn locate_server_in_tar(tar: &[u8]) -> AppResult<Vec<u8>> {
         let mut off = 0usize;
-        while off + 512 <= tar_bytes.len() {
-            let header = &tar_bytes[off..off + 512];
+        while off + 512 <= tar.len() {
+            let header = &tar[off..off + 512];
             if header.iter().all(|&b| b == 0) {
                 break; // 结束块
             }
@@ -385,8 +409,7 @@ impl OtaService {
                 .to_string();
             let size_field = String::from_utf8_lossy(&header[124..136]);
             let size = u64::from_str_radix(size_field.trim_end_matches('\0').trim(), 8)
-                .map_err(|e| AppError::Internal(format!("tar 头解析失败: {e}")))?;
-            let size = size as usize;
+                .map_err(|e| AppError::Internal(format!("tar 头解析失败: {e}")))? as usize;
             let base = Path::new(&name)
                 .file_name()
                 .and_then(|s| s.to_str())
@@ -396,17 +419,15 @@ impl OtaService {
             if base == BINARY_ENTRY && (typeflag == b'0' || typeflag == 0) && size > 0 {
                 let start = off + 512;
                 let end = start + size;
-                if end > tar_bytes.len() {
+                if end > tar.len() {
                     return Err(AppError::Internal("tar 条目越界".to_string()));
                 }
-                return Ok(tar_bytes[start..end].to_vec());
+                return Ok(tar[start..end].to_vec());
             }
             // 512 对齐跳过数据区
             off += 512 + size.div_ceil(512) * 512;
         }
-        Err(AppError::Internal(format!(
-            "归档中未找到 {BINARY_ENTRY} 条目"
-        )))
+        Err(AppError::Internal(format!("归档中未找到 {BINARY_ENTRY} 条目")))
     }
 
     /// DEFLATE 解压（gzip 包装），基于 miniz_oxide（已在依赖树内，随 flate2/zip 等广泛使用）。
@@ -426,13 +447,6 @@ impl OtaService {
     /// 摘要校验时视为可信（CI 的 SHA256SUMS 与 Release 同一工作流产出的固定
     /// 资产）；仅当包未经摘要校验（如 upload 直传）时才要求显式签名。
     pub async fn install(&self, payload: &Value) -> AppResult<Value> {
-        if self.cfg.require_signature {
-            let sig = payload.get("signature").and_then(|v| v.as_str()).unwrap_or("");
-            if sig.len() < 16 {
-                return Err(bad_request("缺少更新包签名，拒绝安装"));
-            }
-            // 真机需接入设备公钥做真实验签；此处为强制门禁，不放行无签名的包。
-        }
         let state = self
             .db
             .update_state_get()
@@ -443,10 +457,35 @@ impl OtaService {
         let bytes = fs::read(&package)
             .await
             .map_err(|e| bad_request(format!("更新包不可读: {e}")))?;
+        let state_sha = udx_storage::row_str(&state, "sha256");
+        let trust = udx_storage::row_str(&state, "last_error");
+        // 摘要与 download 阶段从 Release SHA256SUMS 取到的值一致，且来源标记存在，
+        // 说明这个包与官方发布同源且未被改动，视为可信。
+        let pkg_sha = hex::encode(Sha256::digest(&bytes));
+        let digest_trusted = trust == TRUST_MARKER
+            && state_sha.len() == 64
+            && state_sha == pkg_sha;
+
+        if self.cfg.require_signature && !digest_trusted {
+            let sig = payload.get("signature").and_then(|v| v.as_str()).unwrap_or("");
+            if sig.len() < 16 {
+                return Err(bad_request(
+                    "更新包未经官方 SHA256SUMS 校验，需提供签名才能安装",
+                ));
+            }
+            // 真机需接入设备公钥做真实验签；此处为强制门禁，不放行无签名的包。
+        }
+        let trust_source = if digest_trusted { "release-sha256sums" } else { "signature" };
 
         // 安装目标 = 当前进程可执行文件自身路径（部署目录 /home/root/6677/server）。
         // 不再写相对路径 "server"——原实现受进程 cwd 影响，任何目录启动都会写错位置。
-        let target = std::fs::read_link("/proc/self/exe").unwrap_or_else(|_| PathBuf::from("server"));
+        // Linux 上若可执行文件已被 rename 替换，/proc/self/exe 会带 " (deleted)" 后缀，
+        // 必须剥离，否则第二次安装会写到一个不存在的新文件名。
+        let mut target = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("server"));
+        let raw = target.to_string_lossy().to_string();
+        if let Some(stripped) = raw.strip_suffix(" (deleted)") {
+            target = PathBuf::from(stripped);
+        }
         let backup = target.with_file_name("server.bak");
         if target.exists() {
             let _ = fs::copy(&target, &backup).await;
@@ -487,6 +526,7 @@ impl OtaService {
             "backup": backup.to_string_lossy(),
             "target": target.to_string_lossy(),
             "installed_at": now_ts(),
+            "trust": trust_source,
             "restart_scheduled": true,
             "note": "已原子替换 /home/root/6677/server 并保留 server.bak；服务将在数秒内自动重启，期间面板短暂不可用属正常现象"
         }))
@@ -532,5 +572,85 @@ impl OtaService {
             .ok_or_else(|| bad_request("更新包路径非法"))?;
         let safe = safe_component(name)?;
         Ok(self.package_dir.join(safe))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use flate2::write::GzEncoder;
+    use flate2::Compression;
+    use std::io::Write;
+
+    /// 构造一个最小的 ustar 512 字节头（GNU tar 兼容）。
+    fn tar_header(name: &str, size: usize, typeflag: u8) -> [u8; 512] {
+        let mut h = [0u8; 512];
+        let n = name.as_bytes().len().min(100);
+        h[..n].copy_from_slice(&name.as_bytes()[..n]);
+        // 权限/时间字段可留 0，解析器只关心 name / size / typeflag。
+        let oct = format!("{:011o}\0", size);
+        h[124..136].copy_from_slice(oct.as_bytes());
+        h[156] = typeflag;
+        h[257..263].copy_from_slice(b"ustar\0");
+        h
+    }
+
+    fn tar_archive(entries: &[(&str, &[u8], u8)]) -> Vec<u8> {
+        let mut out = Vec::new();
+        for (name, data, flag) in entries {
+            out.extend_from_slice(&tar_header(name, data.len(), *flag));
+            out.extend_from_slice(data);
+            let pad = (512 - data.len() % 512) % 512;
+            out.extend(std::iter::repeat(0u8).take(pad));
+        }
+        out.extend_from_slice(&[0u8; 1024]); // 结束块
+        out
+    }
+
+    fn gzip(data: &[u8]) -> Vec<u8> {
+        let mut enc = GzEncoder::new(Vec::new(), Compression::default());
+        enc.write_all(data).unwrap();
+        enc.finish().unwrap()
+    }
+
+    #[test]
+    fn locate_server_handles_ci_layout_and_other_entries() {
+        let bin = b"\x7fELF-fake-server-binary";
+        let tar = tar_archive(&[
+            ("6677/", &[], b'5'),
+            ("6677/README.md", b"docs", b'0'),
+            ("6677/start.sh", b"#!/bin/sh", b'0'),
+            ("6677/server", bin, b'0'),
+        ]);
+        assert_eq!(
+            OtaService::locate_server_in_tar(&tar).unwrap(),
+            bin.to_vec()
+        );
+        // gzip 包装后经 gunzip 也能取到相同内容
+        assert_eq!(
+            OtaService::locate_server_in_tar(&OtaService::gunzip(&gzip(&tar)).unwrap()).unwrap(),
+            bin.to_vec()
+        );
+    }
+
+    #[test]
+    fn locate_server_accepts_flat_layout_and_nul_typeflag() {
+        let bin = b"raw-binary";
+        let tar = tar_archive(&[("server", bin, 0)]);
+        assert_eq!(
+            OtaService::locate_server_in_tar(&tar).unwrap(),
+            bin.to_vec()
+        );
+    }
+
+    #[test]
+    fn locate_server_rejects_archive_without_binary() {
+        let tar = tar_archive(&[("6677/start.sh", b"#!/bin/sh", b'0')]);
+        assert!(OtaService::locate_server_in_tar(&tar).is_err());
+    }
+
+    #[test]
+    fn gunzip_rejects_corrupt_data() {
+        assert!(OtaService::gunzip(b"not-a-gzip-stream").is_err());
     }
 }
