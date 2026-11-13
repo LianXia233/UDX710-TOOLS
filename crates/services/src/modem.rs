@@ -348,17 +348,17 @@ impl ModemService {
         let (qci, speed) = if network_type == "nr" {
             (
                 "5QI 9 (5G 默认互联网承载 / Non-GBR)",
-                "下行 500 Mbps / 上行 100 Mbps (5G SA 黄金速率签约)",
+                "下行 500 Mbps / 上行 100 Mbps",
             )
         } else if network_type == "lte" {
             (
                 "QCI 9 (4G 标准互联网承载 / Non-GBR)",
-                "下行 150 Mbps / 上行 50 Mbps (4G LTE 标准签约)",
+                "下行 150 Mbps / 上行 50 Mbps",
             )
         } else {
             (
                 "QCI 9 (默认互联网承载 / Non-GBR)",
-                "下行 100 Mbps / 上行 50 Mbps (标准签约速率)",
+                "下行 100 Mbps / 上行 50 Mbps",
             )
         };
 

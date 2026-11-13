@@ -290,7 +290,7 @@ export function render(container, context) {
       setRef(regRef, '当前卡槽', activeSlot === 2 ? '卡槽 2 (副卡在用)' : '卡槽 1 (默认主卡在用)');
       setRef(regRef, '漫游状态', '本地网络 (非漫游)');
       setRef(regRef, 'QCI / 5QI 业务等级', fieldOf(b, 'qci', '5QI 9 (5G 默认互联网承载 / Non-GBR)'));
-      setRef(regRef, 'SIM 卡签约速率', fieldOf(b, 'subscribed_speed', '下行 500 Mbps / 上行 100 Mbps (5G SA 黄金速率签约)'));
+      setRef(regRef, 'SIM 卡签约速率', fieldOf(b, 'subscribed_speed', '下行 500 Mbps / 上行 100 Mbps'));
 
       // 更新小区表
       const rawCells = (cells && cells.data && cells.data.cells) || (cells && cells.cells) || asArray(cells, ['cells', 'neighbors']);

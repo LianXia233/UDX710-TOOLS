@@ -80,7 +80,7 @@ export function render(container, context) {
     rsrq: kvRow('接收质量 (RSRQ)'),
     sinr: kvRow('信干噪比 (SINR)'),
     qci: kvRow('QCI / 5QI 等级'),
-    speed: kvRow('签约速率等级'),
+    speed: kvRow('SIM 卡签约速率'),
     power: kvRow('供电运行模式'),
     uptime: kvRow('连续运行周期')
   };
@@ -215,7 +215,7 @@ export function render(container, context) {
     channelRows.rsrq.set(rsrq != null ? `${rsrq} dB (优质)` : '—');
     channelRows.sinr.set(sinrStr);
     channelRows.qci.set(fieldOf(cur, 'qci', '5QI 9 (默认互联网承载 / Non-GBR)'));
-    channelRows.speed.set(fieldOf(cur, 'subscribed_speed', '下行 500M / 上行 100M (5G SA 黄金速率)'));
+    channelRows.speed.set(fieldOf(cur, 'subscribed_speed', '下行 500 Mbps / 上行 100 Mbps'));
   }
 
   function applyTotal(total) {
