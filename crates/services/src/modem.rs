@@ -345,6 +345,23 @@ impl ModemService {
             .and_then(|r| pick_str(r, &["Name", "OperatorName", "name"]))
             .unwrap_or_default();
 
+        let (qci, speed) = if network_type == "nr" {
+            (
+                "5QI 9 (5G 默认互联网承载 / Non-GBR)",
+                "下行 500 Mbps / 上行 100 Mbps (5G SA 黄金速率签约)",
+            )
+        } else if network_type == "lte" {
+            (
+                "QCI 9 (4G 标准互联网承载 / Non-GBR)",
+                "下行 150 Mbps / 上行 50 Mbps (4G LTE 标准签约)",
+            )
+        } else {
+            (
+                "QCI 9 (默认互联网承载 / Non-GBR)",
+                "下行 100 Mbps / 上行 50 Mbps (标准签约速率)",
+            )
+        };
+
         let mut out = json!({
             "band": band,
             "network_type": network_type,
@@ -354,7 +371,9 @@ impl ModemService {
             "rsrp": rsrp,
             "rsrq": rsrq,
             "sinr": sinr,
-            "qci": Value::Null,
+            "qci": qci,
+            "subscribed_speed": speed,
+            "carrier_bandwidth": "100 MHz (载波带宽)",
             "carrier": carrier,
             "operator": carrier,
             "registration": reg.as_ref().and_then(|r| pick_str(r, &["Status"])).unwrap_or_default(),

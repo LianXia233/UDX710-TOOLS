@@ -6,12 +6,11 @@ import { el, button, selectField, switchField } from '../utils/dom.js';
 import { fieldOf, safeText } from '../utils/format.js';
 
 const MODES = [
-  { value: 'rndis', label: 'RNDIS（网络共享，兼容 Windows）' },
-  { value: 'ecm', label: 'ECM（以太网）' },
-  { value: 'ncm', label: 'NCM（仅测试）' },
-  { value: 'acm', label: 'ACM（串口）' },
-  { value: 'mtp', label: 'MTP（文件传输）' },
-  { value: 'none', label: '禁用 USB 功能' }
+  { value: 'rndis', label: 'RNDIS（网络共享，兼容 Windows / Linux / 路由器）' },
+  { value: 'ecm', label: 'ECM（CDC-ECM 以太网）' },
+  { value: 'ncm', label: 'NCM（CDC-NCM 高速以太网）' },
+  { value: 'acm', label: 'ACM（虚拟调试串口）' },
+  { value: 'mtp', label: 'MTP（多媒体文件传输）' }
 ];
 
 let ctx = null;
@@ -89,14 +88,29 @@ export function render(container, context) {
     el('li', { text: '热切换立即生效但会短暂断开 USB 连接。' })));
   grid.appendChild(tipCard.el);
 
+  const MODE_TITLES = {
+    rndis: 'RNDIS（网络共享，兼容 Windows）',
+    ecm: 'ECM（CDC-ECM 以太网）',
+    ncm: 'NCM（CDC-NCM 高速以太网）',
+    acm: 'ACM（虚拟调试串口）',
+    mtp: 'MTP（多媒体文件传输）'
+  };
+
   async function load() {
     try {
       const res = await ctx.api('/api/usb/mode', { signal: ctx.signal });
       const o = fieldOf(res, 'data', res) || {};
       const v = (res && typeof res === 'object' && res.mode !== undefined) ? res.mode : o.mode;
-      currentLabel.textContent = safeText(v, '未知');
-      mode.input.value = String(v || 'rndis');
-    } catch (e) { currentLabel.textContent = '未知'; }
+      const modeKey = String(v || '').toLowerCase();
+      currentLabel.textContent = MODE_TITLES[modeKey] || safeText(v, 'RNDIS (默认模式)');
+      currentLabel.className = 'badge badge--ok';
+      if (modeKey && MODE_TITLES[modeKey]) {
+        mode.input.value = modeKey;
+      }
+    } catch (e) {
+      currentLabel.textContent = 'RNDIS (默认模式)';
+      currentLabel.className = 'badge badge--ok';
+    }
   }
 
   load();

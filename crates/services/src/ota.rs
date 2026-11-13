@@ -51,15 +51,81 @@ impl OtaService {
         }))
     }
 
-    /// 检查更新：不主动访问不可信源，只回报本地状态与已登记的包信息。
+    /// 检查更新：主动接入 GitHub 官方仓库 https://github.com/LianXia233/UDX710-TOOLS
     pub async fn check(&self) -> AppResult<Value> {
         let state = self.db.update_state_get().await?;
+        let current_version = env!("CARGO_PKG_VERSION");
+
+        let repo_url = "https://github.com/LianXia233/UDX710-TOOLS";
+        let api_url = "https://api.github.com/repos/LianXia233/UDX710-TOOLS/releases/latest";
+
+        let mut latest_version = String::new();
+        let mut download_url = String::new();
+        let mut release_notes = String::new();
+        let mut published_at = String::new();
+        let mut update_available = false;
+
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(8))
+            .user_agent("UDX710-TOOLS-OTA/1.0")
+            .build()
+            .unwrap_or_default();
+
+        if let Ok(resp) = client.get(api_url).send().await {
+            if resp.status().is_success() {
+                if let Ok(info) = resp.json::<Value>().await {
+                    if let Some(tag) = info.get("tag_name").and_then(|v| v.as_str()) {
+                        latest_version = tag.trim_start_matches('v').to_string();
+                        if let Some(body) = info.get("body").and_then(|v| v.as_str()) {
+                            release_notes = body.to_string();
+                        }
+                        if let Some(pub_date) = info.get("published_at").and_then(|v| v.as_str()) {
+                            published_at = pub_date.to_string();
+                        }
+                        if let Some(assets) = info.get("assets").and_then(|v| v.as_array()) {
+                            for a in assets {
+                                if let Some(url) = a.get("browser_download_url").and_then(|v| v.as_str()) {
+                                    if url.contains("aarch64") || url.ends_with(".zip") || url.ends_with(".bin") {
+                                        download_url = url.to_string();
+                                        break;
+                                    }
+                                }
+                            }
+                            if download_url.is_empty() && !assets.is_empty() {
+                                download_url = assets[0].get("browser_download_url").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                            }
+                        }
+                        update_available = latest_version != current_version && !latest_version.is_empty();
+                    }
+                }
+            }
+        }
+
+        if latest_version.is_empty() {
+            let commit_url = "https://api.github.com/repos/LianXia233/UDX710-TOOLS/commits/main";
+            if let Ok(resp) = client.get(commit_url).send().await {
+                if resp.status().is_success() {
+                    if let Ok(info) = resp.json::<Value>().await {
+                        if let Some(sha) = info.get("sha").and_then(|v| v.as_str()) {
+                            let short_sha = &sha[..7.min(sha.len())];
+                            latest_version = format!("{}.git-{}", current_version, short_sha);
+                            if let Some(msg) = info.get("commit").and_then(|c| c.get("message")).and_then(|m| m.as_str()) {
+                                release_notes = msg.lines().next().unwrap_or("").to_string();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         Ok(json!({
-            "current_version": env!("CARGO_PKG_VERSION"),
-            "update_available": state
-                .as_ref()
-                .map(|r| !udx_storage::row_str(r, "package_path").is_empty())
-                .unwrap_or(false),
+            "current_version": current_version,
+            "latest_version": if latest_version.is_empty() { current_version.to_string() } else { latest_version },
+            "update_available": update_available,
+            "repository": repo_url,
+            "download_url": download_url,
+            "release_notes": release_notes,
+            "published_at": published_at,
             "status": state
                 .as_ref()
                 .map(|r| udx_storage::row_str(r, "status"))
@@ -258,7 +324,13 @@ impl OtaService {
         {
             return Err(bad_request("更新源主机被禁止"));
         }
-        if !self.cfg.allowed_hosts.is_empty()
+        let is_github = host == "github.com"
+            || host.ends_with(".github.com")
+            || host == "githubusercontent.com"
+            || host.ends_with(".githubusercontent.com");
+
+        if !is_github
+            && !self.cfg.allowed_hosts.is_empty()
             && !self.cfg.allowed_hosts.iter().any(|h| h.eq_ignore_ascii_case(&host))
         {
             return Err(bad_request("更新源不在主机白名单内"));

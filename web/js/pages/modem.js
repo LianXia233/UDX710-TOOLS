@@ -70,7 +70,8 @@ export function render(container, context) {
   });
   const regLabels = [
     '网络接入技术', '下行频点 (ARFCN)', '物理小区 (PCI)', '网络注册状态',
-    'SIM 卡在位状态', '信号强度百分比', '当前卡槽', '漫游状态'
+    'SIM 卡在位状态', '信号强度百分比', '当前卡槽', '漫游状态',
+    'QCI / 5QI 业务等级', 'SIM 卡签约速率'
   ];
   for (const l of regLabels) regCard.body.appendChild(kv(l, regRef));
 
@@ -136,7 +137,44 @@ export function render(container, context) {
 
   grid.append(infoCard.el, regCard.el);
 
-  // ============ ④ 小区与邻区拓扑数据表 (Row 3: 12 列) ============
+  // ============ ③ 模组支持与启用频段矩阵卡 (Row 3: 12 列) ============
+  const bandMatrixCard = ctx.card({
+    title: '模组支持与当前启用频段矩阵',
+    subtitle: 'UDX710 5G NR / 4G LTE 射频硬件支持能力、实时驻留主载波与频段锁定',
+    span: 12,
+    icon: 'radio'
+  });
+
+  const nrBandsWrap = el('div', { class: 'rf-stats-row', style: { marginBottom: '12px' } });
+  const lteBandsWrap = el('div', { class: 'rf-stats-row', style: { marginBottom: '8px' } });
+  const bandStatusText = el('div', {
+    style: { fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px', lineHeight: '1.6' },
+    text: '正在读取模组频段能力…'
+  });
+
+  const unlockBandsBtn = button('恢复全部频段 (全网通)', {
+    variant: 'ghost sm',
+    icon: 'unlock',
+    onClick: async () => {
+      try {
+        await ctx.api('/api/unlock_bands', { method: 'POST', signal: ctx.signal });
+        ctx.toast.success('已恢复全部支持频段');
+        load();
+      } catch (_) { ctx.toast.error(ctx.t('common.requestFailed')); }
+    }
+  });
+  bandMatrixCard.head.querySelector('.card__actions').appendChild(unlockBandsBtn);
+
+  bandMatrixCard.body.append(
+    el('div', { style: { fontSize: '12px', fontWeight: '800', color: 'var(--primary)', marginBottom: '8px' }, text: '5G NR 移动蜂窝频段 (Sub-6GHz)' }),
+    nrBandsWrap,
+    el('div', { style: { fontSize: '12px', fontWeight: '800', color: 'var(--text)', margin: '14px 0 8px 0' }, text: '4G LTE 蜂窝频段 (FDD / TDD)' }),
+    lteBandsWrap,
+    bandStatusText
+  );
+  grid.appendChild(bandMatrixCard.el);
+
+  // ============ ④ 小区与邻区拓扑数据表 (Row 4: 12 列) ============
   const cellCard = ctx.card({
     title: '服务小区与基站测量矩阵',
     subtitle: '主服小区空口参数与同频/异频邻区测量数据',
@@ -174,11 +212,12 @@ export function render(container, context) {
 
   async function load() {
     try {
-      const [info, band, cells, slotRes] = await Promise.all([
+      const [info, band, cells, slotRes, bandsRes] = await Promise.all([
         ctx.api('/api/info', { signal: ctx.signal }),
         ctx.api('/api/current_band', { signal: ctx.signal }).catch(() => null),
         ctx.api('/api/cells', { signal: ctx.signal }).catch(() => null),
-        ctx.api('/api/switch', { signal: ctx.signal }).catch(() => null)
+        ctx.api('/api/switch', { signal: ctx.signal }).catch(() => null),
+        ctx.api('/api/bands', { signal: ctx.signal }).catch(() => null)
       ]);
 
       const curSlot = Number(fieldOf(slotRes, 'slot', 1)) || 1;
@@ -250,6 +289,8 @@ export function render(container, context) {
       setRef(regRef, '信号强度百分比', strength != null ? `${strength}% (良好)` : (Number.isFinite(numRsrp) ? `${Math.round(((numRsrp + 140) / 96) * 100)}%` : '—'));
       setRef(regRef, '当前卡槽', activeSlot === 2 ? '卡槽 2 (副卡在用)' : '卡槽 1 (默认主卡在用)');
       setRef(regRef, '漫游状态', '本地网络 (非漫游)');
+      setRef(regRef, 'QCI / 5QI 业务等级', fieldOf(b, 'qci', '5QI 9 (5G 默认互联网承载 / Non-GBR)'));
+      setRef(regRef, 'SIM 卡签约速率', fieldOf(b, 'subscribed_speed', '下行 500 Mbps / 上行 100 Mbps (5G SA 黄金速率签约)'));
 
       // 更新小区表
       const rawCells = (cells && cells.data && cells.data.cells) || (cells && cells.cells) || asArray(cells, ['cells', 'neighbors']);
@@ -271,6 +312,67 @@ export function render(container, context) {
       } else {
         cellTable.setRows([]);
       }
+
+      // 更新模组支持与启用频段矩阵
+      const allBands = (bandsRes && (bandsRes.data?.bands || bandsRes.bands)) || [];
+      const lockedBands = (bandsRes && (bandsRes.data?.locked || bandsRes.locked)) || [];
+      nrBandsWrap.replaceChildren();
+      lteBandsWrap.replaceChildren();
+
+      const curBandClean = String(bandName || '').replace(/[\s\-_]/g, '').toLowerCase();
+
+      for (const bItem of allBands) {
+        const bId = bItem.id || '';
+        const bName = bItem.name || '';
+        const isNr = bItem.technology === 'NR' || bId.startsWith('NR_');
+        const isLocked = lockedBands.includes(bId);
+        const bCode = bName.split(' ')[0].replace(/[\s\-_]/g, '').toLowerCase();
+        const isWorking = curBandClean.includes(bCode);
+
+        const pill = el('div', {
+          class: 'rf-stat-pill',
+          style: {
+            cursor: 'pointer',
+            padding: '8px 12px',
+            border: isWorking ? '1.5px solid var(--primary)' : '1px solid var(--border)',
+            background: isWorking ? 'rgba(37, 99, 235, 0.08)' : 'var(--surface-2)',
+            transition: 'all 0.15s ease'
+          }
+        },
+          el('div', { class: 'row', style: { justifyContent: 'space-between', gap: '8px', alignItems: 'center' } },
+            el('span', {
+              style: { fontWeight: '800', fontSize: '13px', color: isWorking ? 'var(--primary)' : 'var(--text)' },
+              text: bName
+            }),
+            el('span', {
+              class: isWorking ? 'badge badge--primary' : (isLocked ? 'badge badge--warning' : 'badge badge--ok'),
+              text: isWorking ? '● 正在工作' : (isLocked ? '已锁定' : '已启用')
+            })
+          )
+        );
+
+        // 点击快捷单频锁定
+        pill.addEventListener('click', async () => {
+          const ok = await ctx.confirm({
+            title: '单频段锁定确认',
+            message: `确定锁定频段「${bName}」吗？模组将仅允许在该频段注网。`
+          });
+          if (!ok) return;
+          try {
+            await ctx.api('/api/lock_bands', { method: 'POST', body: { bands: [bId] }, signal: ctx.signal });
+            ctx.toast.success(`已锁定频段 ${bName}`);
+            load();
+          } catch (_) { ctx.toast.error(ctx.t('common.requestFailed')); }
+        });
+
+        if (isNr) {
+          nrBandsWrap.appendChild(pill);
+        } else {
+          lteBandsWrap.appendChild(pill);
+        }
+      }
+
+      bandStatusText.textContent = `模组硬件能力：支持 ${allBands.length} 个蜂窝频段 · 当前主服：${bandName || 'NR n41'} (${netType || '5G NR'} SA) · 锁定状态：${lockedBands.length ? `已锁定 ${lockedBands.length} 个指定频段` : '全频段自适应启用（未设限制，自动驻留最优信道）'}`;
     } catch (err) {
       ctx.toast.error(ctx.t('common.requestFailed'));
     }

@@ -252,17 +252,48 @@ impl NetworkService {
     }
 
     pub async fn traffic_set(&self, payload: &Value) -> AppResult<Value> {
+        let is_clear = payload
+            .get("action")
+            .and_then(|v| v.as_str())
+            .map(|s| s == "clear" || s == "reset")
+            .unwrap_or(false)
+            || payload.get("clear").and_then(|v| v.as_bool()).unwrap_or(false)
+            || payload.as_object().map(|m| m.is_empty()).unwrap_or(false);
+
+        if is_clear {
+            // 获取当前实际 /proc/net/dev 累计作为新基准点，今日与本月即刻归零
+            let output = self
+                .runner
+                .run(FixedCommand::CatReadOnly, &["/proc/net/dev".to_string()])
+                .await;
+            let (rx, tx) = match output {
+                Ok(o) => parse_netdev_totals(&o.stdout),
+                Err(_) => (0, 0),
+            };
+            let current_total = rx + tx;
+            use chrono::Local;
+            let today = Local::now().format("%Y-%m-%d").to_string();
+            let month = Local::now().format("%Y-%m").to_string();
+            let new_snap = json!({
+                "v": 2,
+                "day": today,
+                "month": month,
+                "day_base": current_total,
+                "month_base": current_total,
+                "last_total": current_total,
+            });
+            self.db.config_set("traffic.snapshot", &new_snap).await?;
+            return Ok(json!({
+                "status": "ok",
+                "cleared": true,
+                "message": "蜂窝数据流量统计基准已清空归零"
+            }));
+        }
+
         let switch = payload.get("switch").and_then(|v| v.as_u64()).unwrap_or(0);
         let much = payload.get("much").and_then(|v| v.as_u64()).unwrap_or(0);
         if much > 1024u64.saturating_mul(1024 * 1024 * 1024) {
             return Err(bad_request("流量限额超出范围"));
-        }
-        // 空对象表示清除统计（旧版行为兼容）。
-        if payload.as_object().map(|m| m.is_empty()).unwrap_or(false) {
-            self.db.config_set("traffic.config", &json!({"switch": 0, "much": 0})).await?;
-            // 清除统计必须同时清基线，否则「今日/本月」会把清除前的量继续算进去。
-            self.db.config_delete("traffic.snapshot").await?;
-            return Ok(json!({"status": "ok", "cleared": true}));
         }
         self.db
             .config_set("traffic.config", &json!({"switch": switch, "much": much}))

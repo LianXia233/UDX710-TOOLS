@@ -36,8 +36,8 @@ export function render(container, context) {
   const dlRateNum = el('span', { class: 'speed-card__rate', text: '0' });
   const dlRateUnit = el('span', { class: 'speed-card__unit', text: 'B/s' });
   const dlPeakText = el('span', { class: 'badge badge--neutral', text: '峰值: 0 B/s' });
-  const dlTodayTotal = el('span', { class: 'speed-card__total-item' }, '今日: ', el('strong', { id: 'speed-dl-today', text: '0 B' }));
-  const dlMonthTotal = el('span', { class: 'speed-card__total-item' }, '本月: ', el('strong', { id: 'speed-dl-month', text: '0 B' }));
+  const dlRxTotal = el('span', { class: 'speed-card__total-item' }, '下行累计 (RX): ', el('strong', { id: 'speed-dl-total', text: '0 B' }));
+  const dlTodayTotal = el('span', { class: 'speed-card__total-item' }, '今日已用: ', el('strong', { id: 'speed-dl-today', text: '0 B' }));
 
   const dlCard = el('div', { class: 'speed-card speed-card--down' },
     el('div', { class: 'speed-card__head' },
@@ -51,7 +51,7 @@ export function render(container, context) {
       el('div', { class: 'speed-card__rate-row' }, dlRateNum, dlRateUnit),
       dlArc.el
     ),
-    el('div', { class: 'speed-card__totals' }, dlTodayTotal, dlMonthTotal)
+    el('div', { class: 'speed-card__totals' }, dlRxTotal, dlTodayTotal)
   );
 
   // 上行仪表卡 (Uplink)
@@ -59,8 +59,8 @@ export function render(container, context) {
   const ulRateNum = el('span', { class: 'speed-card__rate', text: '0' });
   const ulRateUnit = el('span', { class: 'speed-card__unit', text: 'B/s' });
   const ulPeakText = el('span', { class: 'badge badge--neutral', text: '峰值: 0 B/s' });
-  const ulTodayTotal = el('span', { class: 'speed-card__total-item' }, '今日: ', el('strong', { id: 'speed-ul-today', text: '0 B' }));
-  const ulMonthTotal = el('span', { class: 'speed-card__total-item' }, '本月: ', el('strong', { id: 'speed-ul-month', text: '0 B' }));
+  const ulTxTotal = el('span', { class: 'speed-card__total-item' }, '上行累计 (TX): ', el('strong', { id: 'speed-ul-total', text: '0 B' }));
+  const ulMonthTotal = el('span', { class: 'speed-card__total-item' }, '当月结算: ', el('strong', { id: 'speed-ul-month', text: '0 B' }));
 
   const ulCard = el('div', { class: 'speed-card speed-card--up' },
     el('div', { class: 'speed-card__head' },
@@ -74,7 +74,7 @@ export function render(container, context) {
       el('div', { class: 'speed-card__rate-row' }, ulRateNum, ulRateUnit),
       ulArc.el
     ),
-    el('div', { class: 'speed-card__totals' }, ulTodayTotal, ulMonthTotal)
+    el('div', { class: 'speed-card__totals' }, ulTxTotal, ulMonthTotal)
   );
 
   throughputWrap.append(dlCard, ulCard);
@@ -94,7 +94,29 @@ export function render(container, context) {
     icon: 'chart'
   });
   const refreshBtn = button(ctx.t('common.refresh'), { variant: 'ghost sm', icon: 'refresh', onClick: loadTotal });
-  overview.head.querySelector('.card__actions').appendChild(refreshBtn);
+  const clearBtn = button('清空统计', {
+    variant: 'danger sm', icon: 'trash',
+    onClick: async () => {
+      const ok = await ctx.confirm({
+        title: '清空蜂窝流量统计',
+        message: '确定要将今日与当月已用流量归零吗？此操作将重置统计基线。',
+        danger: true
+      });
+      if (!ok) return;
+      try {
+        await ctx.api('/api/set/total', {
+          method: 'POST',
+          body: { action: 'clear', clear: true },
+          signal: ctx.signal
+        });
+        ctx.toast.success('流量统计已清空');
+        loadTotal();
+      } catch (_) {
+        ctx.toast.error(ctx.t('common.requestFailed'));
+      }
+    }
+  });
+  overview.head.querySelector('.card__actions').append(clearBtn, refreshBtn);
 
   overview.body.appendChild(el('div', { class: 'stat-grid' },
     statBox('今日已用流量', 'tf-today'),
@@ -224,10 +246,14 @@ export function render(container, context) {
       setStat('tf-rx', formatBytes(rx));
       setStat('tf-tx', formatBytes(tx));
 
+      const dlTotal = container.querySelector('#speed-dl-total');
       const dlToday = container.querySelector('#speed-dl-today');
-      const dlMonth = container.querySelector('#speed-dl-month');
+      const ulTotal = container.querySelector('#speed-ul-total');
+      const ulMonth = container.querySelector('#speed-ul-month');
+      if (dlTotal) dlTotal.textContent = formatBytes(rx);
       if (dlToday) dlToday.textContent = formatBytes(today);
-      if (dlMonth) dlMonth.textContent = formatBytes(month);
+      if (ulTotal) ulTotal.textContent = formatBytes(tx);
+      if (ulMonth) ulMonth.textContent = formatBytes(month);
 
       const now = Date.now();
       const timeDelta = Math.max(0.5, (now - lastTime) / 1000);

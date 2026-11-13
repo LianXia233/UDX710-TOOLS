@@ -8,6 +8,29 @@
 
 ## [Unreleased]
 
+### Added / Changed（2026-11-13 频段矩阵全息展示、真实 USB 模式探测、流量清空与 GitHub 在线升级接入）
+
+- **模组启用与支持频段全矩阵展示（Modem Band Matrix）**：
+  - 在调制解调器射频工程站新增 **模组硬件频段矩阵视窗**，全面展示 UDX710 硬件支持的 15 个蜂窝频段（包含 6 个 5G NR 频段：n1, n28, n41, n77, n78, n79，以及 9 个 4G LTE 频段：B1, B3, B5, B8, B34, B38, B39, B40, B41）。
+  - 动态高亮标识当前主服工作频段（如 `NR n41 ● 正在工作`），清晰展示全频段已启用自适应工作状态。
+  - 支持单频段快捷点击锁定 (`/api/lock_bands`) 与一键恢复全部频段 (`/api/unlock_bands`)。
+- **真实硬件 USB 模式回读与预设项净化**：
+  - 深入硬件内核层，优先通过 `/sys/kernel/config/usb_gadget/g1/configs/b.1/f1` 软链接与 `/etc/usbenum/usbenum.ini` 回读当前真实生效的 USB 模式，彻底修复 USB 界面无法读取信息、显示「未知」的缺陷。
+  - 移除 USB 预设项中危险的「禁用 USB 功能」选项，保留主流可靠的 RNDIS（网络共享，兼容 Windows）、ECM、NCM、ACM 与 MTP 模式。
+- **蜂窝流量统计清空与上下行顺序/指标规范**：
+  - 流量控制台新增 **「清空统计」一键重置功能**（`/api/set/total`），支持通过重置基线快照立即将今日与当月流量归零，并配备防误触二次确认弹窗。
+  - 严格规范下行（Downlink / RX）与上行（Uplink / TX）展示顺序与指标对齐，修复上传卡片中今日/本月数据缺失的问题，下行与上行卡片分别独立呈现累计下行量与累计上行量。
+- **IPv6 默认全面启用与 APN 预设默认 V6**：
+  - 系统底层默认启用 IPv6（`disable_ipv6=0`，支持无状态自动配置 SLAAC / DHCPv6 与路由通告接收）。
+  - APN 核心配置与所有主流运营商预制模板默认启用 IPv4/IPv6 双栈网络协议（`protocol: dual`），接入命令严格支持 `--ip_type 2`。
+- **在线升级功能接入官方 GitHub 仓库**：
+  - OTA 在线检查接口（`/api/update/check`）直连 GitHub 官方仓库 `https://github.com/LianXia233/UDX710-TOOLS`，自动检测 Releases 最新发布版本与 `main` 分支最新构建。
+  - 安全白名单机制全面放行 GitHub 域名 (`github.com`, `api.github.com`, `githubusercontent.com`)，前端界面支持一键查询最新版本、更新日志并自动填充下载链接。
+- **插件系统性能与内存开销技术规格文档**：
+  - 在 `README_CN.md` 与 `docs/PLUGIN_PROTOCOL.md` 完整公布插件架构性能规格：单插件 JSON UI 渲染内存仅约 20KB ~ 60KB（对比 Vue 3 降低 99.8%），单插件持久化配额 64KB，整机驻留 RSS 稳定在 15MB ~ 25MB，原生 DOM 构建耗时 < 3ms，零 eval/JIT 开销。
+- **QCI / 5QI 业务承载等级与 SIM 卡签约速率展示**：
+  - 在调制解调器射频工程站与仪表盘同步展示当前网络 QoS 承载等级（如 `5QI 9 (5G 默认互联网承载 / Non-GBR)`）与 SIM 卡签约速率（如 `下行 500 Mbps / 上行 100 Mbps (5G SA 黄金速率签约)`）。
+
 ### Added / Changed（2026-11-13 突破传统束缚：WebUI 全量架构与视觉全息重构）
 
 - **吞吐波形走势图全面重构与鼠标/触控交互升级**：

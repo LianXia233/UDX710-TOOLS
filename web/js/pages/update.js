@@ -19,23 +19,45 @@ export function render(container, context) {
   const grid = el('div', { class: 'page-grid' });
   container.appendChild(grid);
 
-  const versionCard = ctx.card({ title: '当前版本', span: 5, icon: 'download' });
+  const versionCard = ctx.card({ title: '当前版本与官方仓库', span: 5, icon: 'download' });
   const versionLabel = el('span', { class: 'badge badge--primary', text: '读取中…' });
-  const checkResult = el('p', { class: 'muted', text: '' });
-  const checkBtn = button('检查更新', {
-    variant: 'outline', icon: 'refresh',
+  const repoLink = el('a', {
+    href: 'https://github.com/LianXia233/UDX710-TOOLS',
+    target: '_blank',
+    rel: 'noopener noreferrer',
+    style: { fontSize: '12px', color: 'var(--primary)', textDecoration: 'none', fontWeight: '700' },
+    text: 'LianXia233/UDX710-TOOLS ↗'
+  });
+  const checkResult = el('div', { class: 'muted', style: { margin: '8px 0', fontSize: '12px', lineHeight: '1.6' }, text: '接入 GitHub 官方仓库 Releases / Commits 在线自动构建源' });
+  const checkBtn = button('检查 GitHub 最新版本', {
+    variant: 'primary', icon: 'refresh',
     onClick: async () => {
-      log('检查最新版本…');
+      log('正在查询 GitHub 仓库最新版本与构建产物…');
       try {
         const res = await ctx.api('/api/update/check', { signal: ctx.signal });
         const o = fieldOf(res, 'data', res) || {};
-        const latest = fieldOf(o, 'version', fieldOf(o, 'latest', ''));
-        checkResult.textContent = latest ? `发现新版本：${safeText(latest)}` : '当前已是最新版本';
-        log(checkResult.textContent);
+        const cur = fieldOf(o, 'current_version', '—');
+        const latest = fieldOf(o, 'latest_version', fieldOf(o, 'version', ''));
+        const hasUpdate = Boolean(o.update_available);
+        const notes = fieldOf(o, 'release_notes', '');
+        const dlUrl = fieldOf(o, 'download_url', '');
+
+        versionLabel.textContent = `v${cur}`;
+        if (hasUpdate) {
+          checkResult.innerHTML = `<strong>发现新版本：</strong><span class="badge badge--ok">${safeText(latest)}</span><br><span style="color:var(--text-muted);">${safeText(notes)}</span>`;
+          if (dlUrl) {
+            urlInput.input.value = dlUrl;
+          }
+        } else {
+          checkResult.innerHTML = `当前已是最新版本：<span class="badge badge--ok">${safeText(latest || cur)}</span><br><span style="color:var(--text-muted);">已同步官方仓库 main 分支最新功能</span>`;
+        }
+        log(`检查完毕：当前版本 v${cur}，最新版本 ${latest || cur}。`);
       } catch (e) { log(`检查失败：${(e && e.message) || e}`); }
     }
   });
-  versionCard.body.append(el('div', { class: 'kv' }, el('span', { class: 'kv__k', text: '版本' }), versionLabel),
+  versionCard.body.append(
+    el('div', { class: 'kv' }, el('span', { class: 'kv__k', text: '当前运行版本' }), versionLabel),
+    el('div', { class: 'kv' }, el('span', { class: 'kv__k', text: '官方更新仓库' }), repoLink),
     checkResult, checkBtn);
   grid.appendChild(versionCard.el);
 

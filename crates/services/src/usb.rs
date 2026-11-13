@@ -32,14 +32,57 @@ impl UsbService {
     }
 
     pub async fn get_mode(&self) -> AppResult<Value> {
+        let mut mode = self
+            .db
+            .config_get("usb.mode")
+            .await?
+            .and_then(|v| v.get("mode").and_then(|x| x.as_str()).map(str::to_string))
+            .unwrap_or_default();
+
+        // 优先探测内核 configfs 活跃 USB 复合设备函数软链接
+        if mode.is_empty() || mode == "unknown" {
+            if let Ok(target) = std::fs::read_link("/sys/kernel/config/usb_gadget/g1/configs/b.1/f1") {
+                let target_str = target.to_string_lossy().to_ascii_lowercase();
+                if target_str.contains("rndis") {
+                    mode = "rndis".to_string();
+                } else if target_str.contains("ecm") {
+                    mode = "ecm".to_string();
+                } else if target_str.contains("ncm") {
+                    mode = "ncm".to_string();
+                }
+            }
+        }
+
+        // 兜底读取 /etc/usbenum/usbenum.ini 中的 virtualcn 配置
+        if mode.is_empty() || mode == "unknown" {
+            if let Ok(ini) = std::fs::read_to_string("/etc/usbenum/usbenum.ini") {
+                for line in ini.lines() {
+                    let trim = line.trim();
+                    if trim.starts_with("virtualcn=") {
+                        let val = trim.trim_start_matches("virtualcn=").trim();
+                        match val {
+                            "0" => mode = "rndis".to_string(),
+                            "1" | "5" | "6" | "7" | "8" => mode = "ecm".to_string(),
+                            "2" | "9" | "10" | "11" | "12" => mode = "ncm".to_string(),
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        }
+
+        if mode.is_empty() {
+            mode = "rndis".to_string();
+        }
+
         let cfg = self
             .db
             .config_get("usb.mode")
             .await?
-            .unwrap_or(json!({"mode": "unknown", "permanent": false}));
+            .unwrap_or(json!({"permanent": false}));
         let snapshot = self.state.lock().await.clone();
         Ok(json!({
-            "mode": cfg.get("mode").cloned().unwrap_or(json!("unknown")),
+            "mode": mode,
             "permanent": cfg.get("permanent").cloned().unwrap_or(json!(false)),
             "phase": snapshot.phase,
             "last_error": snapshot.last_error,
