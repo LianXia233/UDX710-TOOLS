@@ -34,6 +34,8 @@ verify_tls = true
 # 非空时仅允许这些主机提供更新包
 allowed_hosts = []
 max_package_bytes = 67108864
+# 签名门禁：来自 CI Release 且摘要与 SHA256SUMS 一致的包自动视为可信并放行；
+# 本地手动上传的更新包仍强制要求 signature 字段（真机需接入设备公钥验签）。
 require_signature = true
 download_timeout_secs = 120
 
