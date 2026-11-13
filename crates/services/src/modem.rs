@@ -672,6 +672,14 @@ impl ModemService {
     }
 
     /// SIM 卡槽切换与控制（支持卡槽 1 与卡槽 2，默认卡槽为 1）。
+    ///
+    /// 设备侧命令参数经实机核对：
+    /// - `yr_cmd_app sim set --sim_slot <esim1|esim2> --password <pw>`，
+    ///   `--sim_slot` 只接受 `esimN` 字符串，整数会返回 `Invalid sim_slot value.`；
+    /// - `--password` 是必填参数，旧实现省略它却忽略命令输出，导致 UI 显示
+    ///   "已成功切换"但实际没切（切卡后被 yr-modem 自动选卡改回的假象来源）；
+    /// - 设备未启用密码校验时传空串即可，密码由调用方提供，绝不硬编码。
+    /// 用 argv 直接调用而非 `sh -c`，避免凭据进入命令行拼接与进程列表之外的注入面。
     pub async fn switch_slot(&self, payload: &Value) -> AppResult<Value> {
         let slot = payload
             .get("slot")
@@ -682,13 +690,31 @@ impl ModemService {
             .unwrap_or(1);
         let actual_slot = if slot == 2 { 2 } else { 1 };
         let sim_target = if actual_slot == 2 { "esim2" } else { "esim1" };
+        let password = payload
+            .get("password")
+            .or_else(|| payload.get("esim_password"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
 
-        let cmd = format!("yr_cmd_app simcard set --sim_slot {}", sim_target);
-        let _ = tokio::process::Command::new("sh")
-            .arg("-c")
-            .arg(&cmd)
+        let out = tokio::process::Command::new("yr_cmd_app")
+            .args(["sim", "set", "--sim_slot", sim_target, "--password", password])
             .output()
-            .await;
+            .await
+            .map_err(|e| AppError::ServiceUnavailable(format!("SIM 切换命令执行失败: {e}")))?;
+        let text = String::from_utf8_lossy(&out.stdout);
+        let accepted = serde_json::from_str::<Value>(text.trim())
+            .ok()
+            .and_then(|v| v.get("result").and_then(|r| r.as_i64()))
+            .unwrap_or(-1)
+            == 0;
+        if !accepted {
+            let err = String::from_utf8_lossy(&out.stderr);
+            return Err(AppError::ServiceUnavailable(format!(
+                "设备拒绝 SIM 切换: {} {}",
+                text.trim(),
+                err.trim()
+            )));
+        }
 
         self.cfg_set("modem.sim_slot", json!({"slot": actual_slot})).await?;
         Ok(json!({
@@ -702,15 +728,18 @@ impl ModemService {
     /// 当前卡槽状态读取（支持卡槽 1 和卡槽 2，默认卡槽为 1）。
     pub async fn sim_slot(&self) -> AppResult<Value> {
         let mut current_slot = 1;
-        if let Ok(out) = tokio::process::Command::new("sh")
-            .arg("-c")
-            .arg("yr_cmd_app sim get")
+        // 设备可能上报 esim1/esim2/esim3 三张卡；保留原始值供诊断，
+        // 避免 UI 只枚举 1/2 时无法解释"两个按钮都不激活"的现象。
+        let mut raw_current_sim = String::new();
+        if let Ok(out) = tokio::process::Command::new("yr_cmd_app")
+            .args(["sim", "get"])
             .output()
             .await
         {
             let text = String::from_utf8_lossy(&out.stdout);
             if let Ok(v) = serde_json::from_str::<Value>(&text) {
                 if let Some(cur) = v.get("context").and_then(|c| c.get("current_sim")).and_then(|s| s.as_str()) {
+                    raw_current_sim = cur.to_string();
                     if cur == "esim2" {
                         current_slot = 2;
                     } else if cur == "esim3" {
@@ -721,8 +750,10 @@ impl ModemService {
                 }
             } else if text.contains("\"current_sim\":\"esim2\"") {
                 current_slot = 2;
+                raw_current_sim = "esim2".to_string();
             } else {
                 current_slot = 1;
+                raw_current_sim = "esim1".to_string();
             }
         } else if let Ok(val) = self.cfg_get("modem.sim_slot", json!({"slot": 1})).await {
             current_slot = val.get("slot").and_then(|v| v.as_u64()).unwrap_or(1) as u8;
@@ -731,6 +762,7 @@ impl ModemService {
         Ok(json!({
             "slot": current_slot,
             "default_slot": 1,
+            "raw_current_sim": raw_current_sim,
             "slot_count": 2,
             "switchable": true,
             "slots": [

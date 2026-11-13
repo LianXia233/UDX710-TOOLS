@@ -8,6 +8,12 @@
 
 ## [Unreleased]
 
+### Fixed（2026-11-13 SIM 卡槽切换与开机默认卡）
+
+- **修复面板切卡「假成功」**：`switch_slot()` 旧实现调用 `yr_cmd_app simcard set --sim_slot <esimN>` 缺少必填的 `--password`，且忽略命令输出直接返回成功；实机核对确认 `--sim_slot` 只接受 `esim1`/`esim2` 字符串（整数报 `Invalid sim_slot value.`）。现改为 `yr_cmd_app sim set --sim_slot <esimN> --password <pw>`，以 argv 直接调用（不经 `sh -c`，避免拼接注入），并解析设备返回的 `result` 字段，非 0 时明确报错；密码由调用方提供，未启用校验的设备传空串即可，不硬编码凭据。
+- `sim_slot()` 改用 argv 调用，新增 `raw_current_sim` 字段：设备实际有 esim1/esim2/esim3 三张卡，UI 仅枚举 1/2，原实现返回 `slot=3` 时两个按钮都不激活；现在可据此诊断真实卡位。
+- **实机开机默认卡配置**（设备侧持久化，不在代码库内）：`/mnt/data/yr-modem_conf` 的 `main_sim` 设为 `1`、`enable_auto_switch` 设为 `0`，关闭 yr-modem 自动选卡；原配置 `main_sim=2/3` 且自动切卡开启，是「切到卡槽 1 又跳回 esim2/esim3」的根因。已重启 `yr-modem` 验证：进程按 `main_sim=1` 加载并稳定驻留 esim1。配置备份为 `/mnt/data/yr-modem_conf.bak`。
+
 ## [3.0.1] - 2026-11-13（OTA 发布闭环）
 
 ### Fixed / Changed（OTA 信任门禁、tag 自动发布与归档解析测试）
