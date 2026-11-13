@@ -41,12 +41,23 @@ BASELINE_FILE = HERE / "v2_baseline.json"
 # 写方法集合；WebSocket 交互式终端按任务要求计入写接口
 WRITE_METHODS = {"POST", "PUT", "DELETE", "PATCH", "WS"}
 
-# 协议上必须免认证的写入口（登录 + 忘记密码恢复流程）。
-# 这是 (c) 的唯一例外：若移除它们的公开性，设备将完全无法登录或恢复。
+# 协议上必须免认证的写入口（仅登录本身）。
+# 密保问答与自助重置密码已按需求整体移除，不再有免认证的恢复入口。
 PUBLIC_WRITE_EXEMPT = {
     "/api/auth/login",
+}
+
+# 按需求有意移除的能力：密保问题（问答 / 设置 / 自助重置 / 恢复出厂）。
+# 这些端点是 v2.x 的历史事实（基线快照如实保留，不做篡改），
+# 但当前实现已整体删除，因此 (b) 未匹配项命中本表时放行并单独列示，
+# 便于审查「移除是有意为之」而非实现遗漏。
+REMOVED_BY_DESIGN = {
+    "/api/security/status",
+    "/api/security/setup",
+    "/api/security/questions",
     "/api/security/verify",
     "/api/security/reset-password",
+    "/api/security/factory-reset",
 }
 
 REQUIRED_FIELDS = {
@@ -57,7 +68,6 @@ VALID_AUTH = {"required", "public", "public-get"}
 # 功能域归类：按顺序匹配，精确路径规则放在可能冲突的前缀之前
 DOMAIN_RULES = [
     ("/api/auth/", "认证 auth"),
-    ("/api/security/", "密保 security"),
     ("/api/sms", "短信 sms"),
     ("/api/update/", "OTA 更新"),
     ("/api/charge/", "充电控制"),
@@ -169,9 +179,15 @@ def main() -> int:
     contract_norm = {}
     for e in endpoints:
         contract_norm.setdefault(normalize(e["path"]), e["path"])
-    unmatched = [n for n in c_norm_set if n not in contract_norm]
+    unmatched_raw = [n for n in c_norm_set if n not in contract_norm]
+    removed_norm = {normalize(p) for p in REMOVED_BY_DESIGN}
+    removed_hit = [n for n in unmatched_raw if n in removed_norm]
+    unmatched = [n for n in unmatched_raw if n not in removed_norm]
     if unmatched:
         errors.append("(b) C 路由未能在契约中找到: %s" % ", ".join(unmatched))
+    if removed_hit:
+        print("(b) 按需求有意移除、不再实现的路由 %d 条: %s"
+              % (len(removed_hit), ", ".join(sorted(removed_hit))))
 
     # ---- (c) 写接口认证 ----
     write_count = 0

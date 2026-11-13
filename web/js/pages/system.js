@@ -130,13 +130,38 @@ export function render(container, context) {
   async function loadTime() {
     try {
       const res = await ctx.api('/api/get/time', { signal: ctx.signal });
-      timeLabel.textContent = safeText(fieldOf(res, 'time', fieldOf(res, 'data', res)));
+      const o = (res && typeof res === 'object') ? res : {};
+      // 后端同时给出 time（本地可读）与 timestamp；缺 time 时用 timestamp 兜底格式化，
+      // 避免直接把整个对象 JSON.stringify 出来显示。
+      let text = o.time;
+      if (!text && o.timestamp) {
+        const d = new Date(Number(o.timestamp) * 1000);
+        text = d.toLocaleString();
+      }
+      timeLabel.textContent = safeText(text);
     } catch (e) { timeLabel.textContent = '—'; }
   }
+  const DAY_NAMES = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
   async function loadCron() {
     try {
       const res = await ctx.api('/api/get/first-reboot', { signal: ctx.signal });
-      cronStatus.textContent = `当前配置：${safeText(fieldOf(res, 'data', res), '未设置')}`;
+      const o = (res && typeof res === 'object') ? res : {};
+      const enabled = !!o.enabled;
+      const dayList = Array.isArray(o.days) ? o.days.map(Number) : [];
+      const hh = String(Number(o.hour) || 0).padStart(2, '0');
+      const mm = String(Number(o.minute) || 0).padStart(2, '0');
+      if (!enabled || !dayList.length) {
+        cronStatus.textContent = '当前配置：未启用';
+        return;
+      }
+      const when = dayList.length >= 7
+        ? '每天'
+        : dayList.map((d) => DAY_NAMES[d] || `周${d}`).join('、');
+      cronStatus.textContent = `当前配置：${when} ${hh}:${mm}`;
+      // 回填表单，便于在现有配置上修改而不是从零重填
+      days.input.value = dayList.length >= 7 ? '*' : String(dayList[0]);
+      hour.input.value = String(Number(o.hour) || 0);
+      minute.input.value = String(Number(o.minute) || 0);
     } catch (e) { cronStatus.textContent = '当前配置：未设置'; }
   }
   (async () => {

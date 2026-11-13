@@ -25,19 +25,6 @@ pub fn router(state: AppState) -> Router {
         .route("/api/auth/logout", post(h::auth_logout))
         .route("/api/auth/password", post(h::auth_password))
         .route("/api/auth/status", get(h::auth_status))
-        // ---------------- 密保 ----------------
-        .route("/api/security/status", get(h::security_status))
-        .route("/api/security/setup", post(h::security_setup))
-        .route("/api/security/questions", get(h::security_questions))
-        .route("/api/security/verify", post(h::security_verify))
-        .route(
-            "/api/security/reset-password",
-            post(h::security_reset_password),
-        )
-        .route(
-            "/api/security/factory-reset",
-            post(h::security_factory_reset),
-        )
         // ---------------- 系统 ----------------
         .route("/api/health", get(h::health))
         .route("/api/info", get(h::info))

@@ -49,6 +49,8 @@ pub mod perms {
     pub const CONFIG_READ: &str = "config.read";
     pub const LOG_READ: &str = "log.read";
     pub const UPDATE_READ: &str = "update.read";
+
+    /// 账号安全配置读取（密保功能已移除，保留该权限用于账号安全状态）。
     pub const SECURITY_READ: &str = "security.read";
 
     // ---- 常规写 ----
@@ -74,6 +76,8 @@ pub mod perms {
     pub const WEBHOOK_WRITE: &str = "webhook.write";
     pub const IPV6_PROXY_WRITE: &str = "ipv6_proxy.write";
     pub const RATHOLE_WRITE: &str = "rathole.write";
+
+    /// 账号安全写入（修改密码等；密保问答已移除，权限位保留）。
     pub const SECURITY_WRITE: &str = "security.write";
 
     // ---- 高风险（默认仅 Admin）----
@@ -243,9 +247,6 @@ pub fn permission_for(method: &str, path: &str) -> Option<&'static str> {
     }
     if path.starts_with("/api/scripts") {
         return Some(perms::SCRIPT_WRITE);
-    }
-    if path.starts_with("/api/security") {
-        return Some(perms::SECURITY_WRITE);
     }
     if path.starts_with("/api/ipv6-proxy") {
         return Some(perms::IPV6_PROXY_WRITE);

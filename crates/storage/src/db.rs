@@ -96,6 +96,12 @@ impl Db {
                     let _ = ready_tx.send(Err(format!("执行迁移失败: {e}")));
                     return;
                 }
+                // 幂等补列：CREATE TABLE IF NOT EXISTS 不会给已存在的表加列，
+                // 老库升级时需要显式 ALTER。列已存在时 SQLite 报 duplicate column，
+                // 属预期，忽略即可。
+                for stmt in ["ALTER TABLE rathole_services ADD COLUMN name TEXT NOT NULL DEFAULT ''"] {
+                    let _ = conn.execute_batch(stmt);
+                }
                 let _ = ready_tx.send(Ok(()));
 
                 while let Some(cmd) = rx.blocking_recv() {

@@ -35,7 +35,6 @@ import * as terminal from './pages/terminal.js';
 import * as settings from './pages/settings.js';
 import * as apn from './pages/apn.js';
 import * as usb from './pages/usb.js';
-import * as security from './pages/security.js';
 import * as ipv6Proxy from './pages/ipv6-proxy.js';
 import * as rathole from './pages/rathole.js';
 import * as update from './pages/update.js';
@@ -44,7 +43,7 @@ import * as charge from './pages/charge.js';
 
 const PAGES = {
   login, dashboard, modem, sms, network, traffic, plugins, system, terminal,
-  settings, apn, usb, security, ipv6Proxy, rathole, update, atDebug, charge
+  settings, apn, usb, ipv6Proxy, rathole, update, atDebug, charge
 };
 
 // ---- 导航配置（分组 + 页面 id + 图标 + i18n key） ----
@@ -67,7 +66,6 @@ const NAV = [
   { group: 'nav.groupSystem', items: [
     { id: 'system', label: 'nav.system', icon: 'cpu' },
     { id: 'update', label: 'nav.update', icon: 'download' },
-    { id: 'security', label: 'nav.security', icon: 'shield' },
     { id: 'settings', label: 'nav.settings', icon: 'settings' },
     { id: 'usb', label: 'nav.usb', icon: 'usb' },
     { id: 'charge', label: 'nav.charge', icon: 'battery' }

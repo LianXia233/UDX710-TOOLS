@@ -49,7 +49,6 @@ PAGE_MAP = {
     "PluginBtn.vue": "core/plugin-renderer.js",
     "PluginStatus.vue": "core/plugin-renderer.js",
     "SystemSettings.vue": "settings.js + system.js",
-    "SecuritySetup.vue": "security.js",
     "ForgotPasswordModal.vue": "login.js",
     "LoginPage.vue": "login.js",
     "GlobalToast.vue": "components/toast.js",
@@ -99,6 +98,19 @@ def load_baseline() -> dict:
     return data
 
 
+# 按需求有意移除的能力（密保问题整套），基线保留历史事实、不做篡改，
+# 但对照时登记为「已移除」，使其不产生 FAIL，同时在输出中显式列示便于审查。
+REMOVED_BY_DESIGN_ROUTES = {
+    "/api/security/status",
+    "/api/security/setup",
+    "/api/security/questions",
+    "/api/security/verify",
+    "/api/security/reset-password",
+    "/api/security/factory-reset",
+}
+REMOVED_BY_DESIGN_COMPONENTS = {"SecuritySetup.vue"}
+
+
 def main() -> int:
     failures: list[str] = []
     baseline = load_baseline()
@@ -131,9 +143,13 @@ def main() -> int:
         return any(q.endswith("/:id") and n.startswith(q[:-4]) for q in new_paths)
 
     # ---- (a) 旧 C 路由 ----
-    c_miss = sorted(p for p in c_routes if not covered(p))
+    c_removed = sorted(p for p in c_routes if p in REMOVED_BY_DESIGN_ROUTES and not covered(p))
+    c_miss = sorted(p for p in c_routes
+                    if not covered(p) and p not in REMOVED_BY_DESIGN_ROUTES)
     print("(a) 旧 C 后端路由 -> 新契约/Rust 路由")
     print(f"    旧路由 {len(c_routes)} 条 | 未覆盖 {len(c_miss)} 条 {c_miss or '（无）'}")
+    if c_removed:
+        print(f"    按需求有意移除 {len(c_removed)} 条: {', '.join(c_removed)}")
     if c_miss:
         failures.append(f"旧 C 路由未覆盖: {c_miss}")
 
@@ -147,7 +163,9 @@ def main() -> int:
     # ---- (c) 旧 Vue 组件 -> 新页面 ----
     comp_miss = []
     # 双向核对：映射表不得虚构旧组件，也不得漏掉快照里的旧组件
-    for comp in sorted(vue_components - PAGE_MAP.keys()):
+    # 有意移除的组件（随密保功能整体删除）不计入缺失，单独列示。
+    comp_removed = sorted(vue_components & REMOVED_BY_DESIGN_COMPONENTS)
+    for comp in sorted(vue_components - PAGE_MAP.keys() - REMOVED_BY_DESIGN_COMPONENTS):
         comp_miss.append(f"{comp}(未建立映射)")
     for comp in sorted(PAGE_MAP.keys() - vue_components):
         comp_miss.append(f"{comp}(映射表多出/基线无此组件)")
@@ -165,6 +183,8 @@ def main() -> int:
             comp_miss.append(f"{comp} -> {target}")
     print("(c) 旧 Vue 组件 -> 新页面/组件")
     print(f"    基线组件 {len(vue_components)} 个 / 映射 {len(PAGE_MAP)} 项 | 缺失 {len(comp_miss)} 项 {comp_miss or '（无）'}")
+    if comp_removed:
+        print(f"    按需求有意移除 {len(comp_removed)} 个: {', '.join(comp_removed)}")
     if comp_miss:
         failures.append(f"组件映射缺失: {comp_miss}")
 

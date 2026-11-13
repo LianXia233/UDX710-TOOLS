@@ -1,0 +1,31 @@
+# 统一行尾：源码与脚本必须 LF，避免 Windows 侧 autocrlf 改写成 CRLF。
+# 设备端 BusyBox ash 与 shell 脚本对 CRLF 敏感（\r 会进入命令名导致执行失败）。
+* text=auto eol=lf
+
+# 二进制资源不做行尾转换
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.svg text eol=lf
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.gz binary
+*.apk binary
+*.ipk binary
+
+# 脚本显式声明 LF
+*.sh text eol=lf
+*.rs text eol=lf
+*.toml text eol=lf
+*.sql text eol=lf
+*.js text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.py text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.md text eol=lf

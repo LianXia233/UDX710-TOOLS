@@ -280,9 +280,32 @@ impl ModemService {
             .await
             .map(|o| o.stdout)
             .unwrap_or_default();
+        // 前端（web/js/pages/system.js）读取 time 字段直接展示，
+        // 只返回 rtc 原文会让页面显示成整段 RTC 文本或空值。
+        // 这里给出本地时区的人类可读时间，同时保留 rtc 原文与时间戳。
+        let now = chrono::Local::now();
+        let time = now.format("%Y-%m-%d %H:%M:%S").to_string();
+        let date = now.format("%Y-%m-%d").to_string();
+        // 从 /proc/driver/rtc 里抽 rtc_time / rtc_date 便于排障比对
+        let mut rtc_time = String::new();
+        let mut rtc_date = String::new();
+        for line in text.lines() {
+            let mut parts = line.splitn(2, ':');
+            let key = parts.next().unwrap_or("").trim();
+            let val = parts.next().unwrap_or("").trim();
+            match key {
+                "rtc_time" => rtc_time = val.to_string(),
+                "rtc_date" => rtc_date = val.to_string(),
+                _ => {}
+            }
+        }
         Ok(json!({
             "timestamp": udx_storage::now_ts(),
+            "time": time,
+            "date": date,
             "rtc": text,
+            "rtc_time": rtc_time,
+            "rtc_date": rtc_date,
         }))
     }
 

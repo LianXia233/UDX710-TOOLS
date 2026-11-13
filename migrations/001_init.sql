@@ -87,6 +87,7 @@ CREATE TABLE IF NOT EXISTS apn_templates (
 
 CREATE TABLE IF NOT EXISTS rathole_services (
     id         TEXT PRIMARY KEY,
+    name       TEXT NOT NULL DEFAULT '',
     config     TEXT NOT NULL,
     updated_at INTEGER NOT NULL
 );
@@ -103,16 +104,6 @@ CREATE TABLE IF NOT EXISTS sms_sent (
     content   TEXT NOT NULL,
     at        INTEGER NOT NULL,
     status    TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS security (
-    id            INTEGER PRIMARY KEY CHECK (id = 1),
-    question1     TEXT,
-    answer1_hash  TEXT,
-    question2     TEXT,
-    answer2_hash  TEXT,
-    salt          TEXT,
-    updated_at    INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS update_state (

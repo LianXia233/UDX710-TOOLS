@@ -94,61 +94,6 @@ pub async fn auth_status(
     done(s.services.auth.status(principal.as_ref().map(|e| &e.0))).await
 }
 
-// ============================ 密保 ============================
-
-pub async fn security_status(State(s): State<AppState>) -> ApiResult<Json<Value>> {
-    done(s.services.auth.security_status()).await
-}
-
-pub async fn security_setup(
-    State(s): State<AppState>,
-    Json(b): Json<Value>,
-) -> ApiResult<Json<Value>> {
-    s.services
-        .auth
-        .security_setup(field(&b, "question1"), field(&b, "answer1"), field(&b, "question2"), field(&b, "answer2"))
-        .await?;
-    Ok(Json(json!({"status": "ok"})))
-}
-
-pub async fn security_questions(State(s): State<AppState>) -> ApiResult<Json<Value>> {
-    done(s.services.auth.security_questions()).await
-}
-
-pub async fn security_verify(
-    State(s): State<AppState>,
-    Json(b): Json<Value>,
-) -> ApiResult<Json<Value>> {
-    let ok = s
-        .services
-        .auth
-        .security_verify(field(&b, "answer1"), field(&b, "answer2"))
-        .await?;
-    Ok(Json(json!({"status": "ok", "verified": ok})))
-}
-
-pub async fn security_reset_password(
-    State(s): State<AppState>,
-    Json(b): Json<Value>,
-) -> ApiResult<Json<Value>> {
-    s.services
-        .auth
-        .security_reset_password(field(&b, "answer1"), field(&b, "answer2"), field(&b, "confirm"))
-        .await?;
-    Ok(Json(json!({"status": "ok"})))
-}
-
-pub async fn security_factory_reset(
-    State(s): State<AppState>,
-    Json(b): Json<Value>,
-) -> ApiResult<Json<Value>> {
-    s.services
-        .auth
-        .security_factory_reset(field(&b, "answer1"), field(&b, "answer2"), field(&b, "confirm"))
-        .await?;
-    Ok(Json(json!({"status": "ok"})))
-}
-
 // ============================ 系统 ============================
 
 pub async fn info(State(s): State<AppState>) -> ApiResult<Json<Value>> {

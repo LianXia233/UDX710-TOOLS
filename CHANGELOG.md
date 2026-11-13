@@ -12,6 +12,7 @@
 
 ### Removed
 
+- **移除密保问题功能（整套）**：删除 `/api/security/*` 6 条路由与 6 个 handler、`AuthService` 6 个密保方法、`security` 表与相关 SQL 常量、`SecuritySetup.vue` 对应的页面组件 `web/js/pages/security.js`、导航入口、登录页「忘记密码 → 密保验证 → 重置密码」流程、中英文 i18n 密保文案。契约基线快照保留历史事实不改写，改由 `verify.py` / `parity.py` 的 `REMOVED_BY_DESIGN` 白名单显式登记，门禁仍为 PASS。
 - 删除旧 C 后端 `src/`（61 文件）、旧 Vue3 前端 `web/src/`（39 文件）、`web/package.json` / `package-lock.json` / `vite.config.js` / `tailwind.config.js` / `postcss.config.js`。
 - 删除 vendored 工具链 `bin/` / `include/` / `lib/` / `share/`（852 文件，旧 C 构建的 GLib / Mongoose 依赖）。
 - 删除旧插件文档与示例：`docs/PLUGIN_GUIDE.md`、`docs/插件开发指南2.0.md`、`docs/default_plugin.js`、`docs/example_system_toolkit.js`（描述已废弃的 Vue 动态模板插件）。
@@ -27,6 +28,23 @@
 
 - 原始 v2.x 实现仍可从 git 历史查阅 / 回退；`parity.py` 对照结论不变（PASS，零遗漏），`verify.py` 仍 PASS（95 端点 / 90 条 C 路由全命中）。
 - 报告要求的真机验收（阶段 8）尚未完成；本次为代码层清理，不代表真机指标达标。
+
+### Fixed（2026-11-13 前后端接口对接与系统时间）
+
+- **`/api/get/time` 字段缺失**：原实现只返回 `{timestamp, rtc}`，而前端 `system.js` 读 `time`，导致「系统时间」显示为空或整段 RTC 原文。现补 `time`（`YYYY-MM-DD HH:MM:SS`）、`date`，并从 `/proc/driver/rtc` 抽出 `rtc_time` / `rtc_date` 便于排障比对。
+- **定时重启配置被冲掉**：前端只传 `day/hour/minute`，后端 `reboot_set` 把 payload 整份写入 `reboot.schedule`，`days` 与 `enabled` 被覆盖丢失，页面永远显示 `{"days":[],"enabled":false,...}`。现引入 `reboot_normalize`：兼容单值 `day`（`*`/`0-6`）与数组 `days`，输出恒含 `days/enabled/hour/minute` 四键。
+- **定时重启不落地**：原实现只写数据库，设备从不真的重启。现在 `reboot_set` / `reboot_clear` 同步维护 `/var/spool/cron/crontabs/root` 中带 `# udx710-reboot-schedule` 标记的两行，只增删自己的行，**不触碰看门狗兜底任务**。
+- **`/api/rathole/services` 500**：`repos.rs` 查询 `SELECT id,name,config,updated_at` 但迁移脚本的 `rathole_services` 没有 `name` 列，返回 `no such column: name`。迁移补 `name TEXT NOT NULL DEFAULT ''`，并在 `Db::open` 中做幂等 `ALTER TABLE` 兼容已存在的老库。
+- **`/api/info` 缺字段**：按 `tests/contract/api_endpoints.json` 的响应规范补齐 `uptime` / `total_ram` / `free_ram` / `mem_total` / `mem_used` / `thermal_temp` / `temperature` / `machine` / `sysname` / `release`，并为 `modem.js` 读取的 `model` / `imei` / `iccid` / `carrier` / `serial` / `firmware` 显式给出空串（无数据源时不伪造设备标识，避免前端出现 `undefined` 分支）。
+- **`/api/charge/config` 电池字段缺失**：补 `level` / `capacity` / `status` / `charging` / `health` / `voltage` / `current` / `temperature`，从 `power_supply` sysfs 读取并做单位换算（微伏→V、0.1℃→℃、微安→mA）；无电池节点时显式返回空串。
+- **未知 `/api/*` 返回 200 HTML**：静态资源 fallback 会把不存在的 API 路径回退成 `index.html`，前端 `response.ok` 为真却解析 JSON 失败，报错信息失真。现 `/api/*` 未命中路由统一返回 **404 JSON** `{"status":"error","message":"接口不存在","code":"not_found"}`。
+- **看门狗单例判重失效（服务层测试）**：`watchdog::tests::stall_is_detected_only_after_threshold_and_beat_resets_it` 原先「先构造状态再取 `now_ms()`」，两者相隔几毫秒即让 `t0+9_999` 越过 10s 阈值，属偶发失败。现以 `WatchdogState::last_beat_ms()` 为基准，判定完全确定性。
+
+### Fixed（2026-11-13 实机看门狗单例）
+
+- `panel_watchdog.sh` 的单例保护由「读 pid 文件判重」改为 **`mkdir` 原子锁 + pid 写入重试 + 主循环锁归属自检**。原实现在 cron 并发调用下会出现多个实例同时通过判重（实机压测 12 并发曾出现 8 个实例）。
+- 判重失效根因：BusyBox 跑脚本时 `/proc/PID/comm` 是**脚本名截断 15 字符**（`panel_watchdog.`）而非 `sh`，白名单只写 `sh|ash|dash|busybox` 会把存活实例误判为死进程、互相接管。现白名单兼容 `panel_watchdog*` 前缀。
+- 实机验证：12 并发启动后实例数 1，跨完整 cron 周期（90s）仍为 1；`kill -9 server` 后 **12.0s 自动恢复**。
 
 ### Changed（2026-11-13 构建与部署优化）
 

@@ -1,857 +1,1460 @@
 [
   {
     "path": "/api/auth/login",
-    "methods": ["POST"],
+    "methods": [
+      "POST"
+    ],
     "auth": "public",
     "permission": "auth.login",
-    "request": {"password": "string"},
-    "response": {"status": "success|error", "message": "string", "token": "string (仅成功时, 64 位 hex)"},
+    "request": {
+      "password": "string"
+    },
+    "response": {
+      "status": "success|error",
+      "message": "string",
+      "token": "string (仅成功时, 64 位 hex)"
+    },
     "notes": "登录入口, 协议上必须免认证. 旧版密码错误返回 401 且 body 为 status=error / message=密码错误. Rust 侧须补登录失败限速、Token 过期/撤销/轮换, 且避免把长期凭证写入 localStorage."
   },
   {
     "path": "/api/auth/status",
-    "methods": ["GET"],
+    "methods": [
+      "GET"
+    ],
     "auth": "public",
     "permission": "auth.status.read",
     "request": {},
-    "response": {"logged_in": "bool", "auth_required": "bool"},
+    "response": {
+      "logged_in": "bool",
+      "auth_required": "bool"
+    },
     "notes": "登录状态查询, 公开. 带 Bearer Token 时返回该 Token 是否有效. 不返回任何 Token 内容."
   },
   {
     "path": "/api/auth/logout",
-    "methods": ["POST"],
+    "methods": [
+      "POST"
+    ],
     "auth": "required",
     "permission": "auth.logout",
-    "request": {"Authorization": "Bearer <token> (header)"},
-    "response": {"status": "success|error", "message": "string"},
+    "request": {
+      "Authorization": "Bearer <token> (header)"
+    },
+    "response": {
+      "status": "success|error",
+      "message": "string"
+    },
     "notes": "加固: 旧版该路由位于认证中间件之前、无需 Token 验证; 新版要求有效 Token 并只撤销当前 Token, 不影响其他设备."
   },
   {
     "path": "/api/auth/password",
-    "methods": ["POST"],
+    "methods": [
+      "POST"
+    ],
     "auth": "required",
     "permission": "auth.password.change",
-    "request": {"old_password": "string", "new_password": "string"},
-    "response": {"status": "success|error", "message": "string"},
+    "request": {
+      "old_password": "string",
+      "new_password": "string"
+    },
+    "response": {
+      "status": "success|error",
+      "message": "string"
+    },
     "notes": "加固: 旧版位于认证中间件之前、仅凭旧密码即可改密. 新版要求有效 Token + 旧密码, 改密后清除全部 Token 强制重新登录. 旧密码错误返回 401."
   },
   {
     "path": "/api/info",
-    "methods": ["GET"],
+    "methods": [
+      "GET"
+    ],
     "auth": "public-get",
     "permission": "system.info.read",
     "request": {},
-    "response": {"hostname": "string", "sysname": "string", "release": "string", "version": "string", "machine": "string", "total_ram": "int", "free_ram": "int", "cached_ram": "int", "cpu_usage": "float", "uptime": "float", "bridge_status": "string", "sim_slot": "string", "signal_strength": "string", "thermal_temp": "float", "power_status": "string", "battery_health": "string", "battery_capacity": "int", "ssid": "string", "passwd": "string", "select_network_mode": "string", "is_activated": "int", "serial": "string", "network_mode": "string", "airplane_mode": "bool", "imei": "string", "iccid": "string", "imsi": "string", "carrier": "string", "network_type": "string", "network_band": "string", "qci": "int", "downlink_rate": "int", "uplink_rate": "int"},
+    "response": {
+      "hostname": "string",
+      "sysname": "string",
+      "release": "string",
+      "version": "string",
+      "machine": "string",
+      "total_ram": "int",
+      "free_ram": "int",
+      "cached_ram": "int",
+      "cpu_usage": "float",
+      "uptime": "float",
+      "bridge_status": "string",
+      "sim_slot": "string",
+      "signal_strength": "string",
+      "thermal_temp": "float",
+      "power_status": "string",
+      "battery_health": "string",
+      "battery_capacity": "int",
+      "ssid": "string",
+      "passwd": "string",
+      "select_network_mode": "string",
+      "is_activated": "int",
+      "serial": "string",
+      "network_mode": "string",
+      "airplane_mode": "bool",
+      "imei": "string",
+      "iccid": "string",
+      "imsi": "string",
+      "carrier": "string",
+      "network_type": "string",
+      "network_band": "string",
+      "qci": "int",
+      "downlink_rate": "int",
+      "uplink_rate": "int"
+    },
     "notes": "仅 GET 免认证 (public-get). 注意旧版返回 passwd / imei / iccid / imsi 等敏感字段, 新版应评估脱敏或改为需认证读取; 保留字段以保持前端兼容."
   },
   {
     "path": "/api/serial",
-    "methods": ["GET"],
+    "methods": [
+      "GET"
+    ],
     "auth": "required",
     "permission": "system.serial.read",
     "request": {},
-    "response": {"serial": "string"},
+    "response": {
+      "serial": "string"
+    },
     "notes": "前端 useApi.js getDeviceSerial() 调用, 但旧 C 路由表未注册该路径 (序列号实际由 /api/info 返回). 列为已知差异: Rust 侧补兼容别名或前端改读 /api/info."
   },
   {
     "path": "/api/key",
-    "methods": ["POST"],
+    "methods": [
+      "POST"
+    ],
     "auth": "required",
     "permission": "system.activation.write",
-    "request": {"key": "string"},
-    "response": {"status": "success|error", "message": "string"},
+    "request": {
+      "key": "string"
+    },
+    "response": {
+      "status": "success|error",
+      "message": "string"
+    },
     "notes": "前端 useApi.js submitActivationKey() 调用, 旧 C 路由表未注册. 列为已知差异: Rust 侧需实现激活码校验或前端移除该调用. 属设备写操作, 必须认证."
   },
   {
     "path": "/api/device_control",
-    "methods": ["POST"],
+    "methods": [
+      "POST"
+    ],
     "auth": "required",
     "permission": "device.control.execute",
-    "request": {"action": "reboot|poweroff"},
-    "response": {"status": "success|error", "message": "string"},
+    "request": {
+      "action": "reboot|poweroff"
+    },
+    "response": {
+      "status": "success|error",
+      "message": "string"
+    },
     "notes": "报告 08 章严重项: 旧版 is_auth_whitelist 将 POST / OPTIONS 的 /api/device_control 放行, 含 reboot / poweroff. 新版移除免认证规则, 必须有效 Token; 建议按动作再细分为 device.control.reboot 与 device.control.poweroff 两个权限; 写入独立审计日志."
   },
   {
     "path": "/api/clear_cache",
-    "methods": ["POST"],
+    "methods": [
+      "POST"
+    ],
     "auth": "required",
     "permission": "system.cache.clear",
     "request": {},
-    "response": {"status": "success|error", "message": "string"},
+    "response": {
+      "status": "success|error",
+      "message": "string"
+    },
     "notes": "设备写操作. 内部执行固定命令 (sync / drop_caches), 不得拼接用户输入."
   },
   {
     "path": "/api/at",
-    "methods": ["POST"],
+    "methods": [
+      "POST"
+    ],
     "auth": "required",
     "permission": "modem.at.execute",
-    "request": {"command": "string"},
-    "response": {"Code": "0|1", "Error": "string", "Data": "string|null"},
+    "request": {
+      "command": "string"
+    },
+    "response": {
+      "Code": "0|1",
+      "Error": "string",
+      "Data": "string|null"
+    },
     "notes": "特殊响应体 (Code/Error/Data), 非通用 status/message 格式, 属已知差异须兼容. 敏感: 日志不得记录完整 AT 命令与短信正文; 命令需经 Modem 队列与超时控制."
   },
   {
     "path": "/api/set_network",
-    "methods": ["POST"],
+    "methods": [
+      "POST"
+    ],
     "auth": "required",
     "permission": "network.mode.write",
-    "request": {"mode": "string", "slot": "slot1|slot2 (可选)"},
-    "response": {"status": "success|error", "message": "string"},
+    "request": {
+      "mode": "string",
+      "slot": "slot1|slot2 (可选)"
+    },
+    "response": {
+      "status": "success|error",
+      "message": "string"
+    },
     "notes": "设备写操作. mode / slot 必须白名单校验; 网络切换失败须恢复原配置."
   },
   {
     "path": "/api/switch",
-    "methods": ["POST"],
+    "methods": [
+      "POST"
+    ],
     "auth": "required",
     "permission": "sim.slot.write",
-    "request": {"slot": "slot1|slot2"},
-    "response": {"status": "success|error", "message": "string"},
+    "request": {
+      "slot": "slot1|slot2"
+    },
+    "response": {
+      "status": "success|error",
+      "message": "string"
+    },
     "notes": "设备写操作. slot 仅允许 slot1 / slot2 两个枚举值."
   },
   {
     "path": "/api/airplane_mode",
-    "methods": ["POST"],
+    "methods": [
+      "POST"
+    ],
     "auth": "required",
     "permission": "network.airplane.write",
-    "request": {"enabled": "bool"},
-    "response": {"status": "success|error", "message": "string"},
+    "request": {
+      "enabled": "bool"
+    },
+    "response": {
+      "status": "success|error",
+      "message": "string"
+    },
     "notes": "设备写操作. enabled 为布尔, 旧版非法请求返回 400."
   },
   {
     "path": "/api/bands",
-    "methods": ["GET"],
+    "methods": [
+      "GET"
+    ],
     "auth": "required",
     "permission": "radio.band.read",
     "request": {},
-    "response": {"bands": "array<object>"},
+    "response": {
+      "bands": "array<object>"
+    },
     "notes": "读取频段列表, 需认证."
   },
   {
     "path": "/api/lock_bands",
-    "methods": ["POST"],
+    "methods": [
+      "POST"
+    ],
     "auth": "required",
     "permission": "radio.band.lock",
-    "request": {"bands": "array<string>"},
-    "response": {"status": "success|error", "message": "string"},
+    "request": {
+      "bands": "array<string>"
+    },
+    "response": {
+      "status": "success|error",
+      "message": "string"
+    },
     "notes": "设备写操作. bands 数组元素需按已知频段枚举校验, 不得拼进 Shell."
   },
   {
     "path": "/api/unlock_bands",
-    "methods": ["POST"],
+    "methods": [
+      "POST"
+    ],
     "auth": "required",
     "permission": "radio.band.unlock",
     "request": {},
-    "response": {"status": "success|error", "message": "string"},
+    "response": {
+      "status": "success|error",
+      "message": "string"
+    },
     "notes": "设备写操作. 解锁全部频段."
   },
   {
     "path": "/api/cells",
-    "methods": ["GET"],
+    "methods": [
+      "GET"
+    ],
     "auth": "required",
     "permission": "radio.cell.read",
     "request": {},
-    "response": {"cells": "array<object>"},
+    "response": {
+      "cells": "array<object>"
+    },
     "notes": "读取小区信息, 需认证."
   },
   {
     "path": "/api/lock_cell",
-    "methods": ["POST"],
+    "methods": [
+      "POST"
+    ],
     "auth": "required",
     "permission": "radio.cell.lock",
-    "request": {"technology": "string", "arfcn": "string", "pci": "string"},
-    "response": {"status": "success|error", "message": "string"},
+    "request": {
+      "technology": "string",
+      "arfcn": "string",
+      "pci": "string"
+    },
+    "response": {
+      "status": "success|error",
+      "message": "string"
+    },
     "notes": "设备写操作. technology / arfcn / pci 需类型与范围校验, 固定 argv 传递."
   },
   {
     "path": "/api/unlock_cell",
-    "methods": ["POST"],
+    "methods": [
+      "POST"
+    ],
     "auth": "required",
     "permission": "radio.cell.unlock",
     "request": {},
-    "response": {"status": "success|error", "message": "string"},
+    "response": {
+      "status": "success|error",
+      "message": "string"
+    },
     "notes": "设备写操作. 解锁小区锁定."
   },
   {
     "path": "/api/current_band",
-    "methods": ["GET"],
+    "methods": [
+      "GET"
+    ],
     "auth": "public-get",
     "permission": "radio.band.read",
     "request": {},
-    "response": {"band": "string"},
+    "response": {
+      "band": "string"
+    },
     "notes": "仅 GET 免认证 (public-get), 对齐旧版白名单 GET /api/current_band."
   },
   {
     "path": "/api/get/Total",
-    "methods": ["GET"],
+    "methods": [
+      "GET"
+    ],
     "auth": "required",
     "permission": "traffic.total.read",
     "request": {},
-    "response": {"total": "int", "used": "int"},
+    "response": {
+      "total": "int",
+      "used": "int"
+    },
     "notes": "保留原始大小写拼写 /api/get/Total, 不得规范化为小写."
   },
   {
     "path": "/api/get/set",
-    "methods": ["GET"],
+    "methods": [
+      "GET"
+    ],
     "auth": "required",
     "permission": "traffic.config.read",
     "request": {},
-    "response": {"switch": "int", "much": "int"},
+    "response": {
+      "switch": "int",
+      "much": "int"
+    },
     "notes": "读取流量限额配置."
   },
   {
     "path": "/api/set/total",
-    "methods": ["POST"],
+    "methods": [
+      "POST"
+    ],
     "auth": "required",
     "permission": "traffic.limit.write",
-    "request": {"switch": "int (可选)", "much": "int 字节 (可选)", "空对象 {}": "表示清空统计"},
-    "response": {"status": "success|error", "message": "string"},
+    "request": {
+      "switch": "int (可选)",
+      "much": "int 字节 (可选)",
+      "空对象 {}": "表示清空统计"
+    },
+    "response": {
+      "status": "success|error",
+      "message": "string"
+    },
     "notes": "设备写操作. 空 body 时表示清除流量统计; much 为字节数, 需上限校验."
   },
   {
     "path": "/api/get/time",
-    "methods": ["GET"],
+    "methods": [
+      "GET"
+    ],
     "auth": "required",
     "permission": "system.time.read",
     "request": {},
-    "response": {"time": "string", "timestamp": "int"},
+    "response": {
+      "time": "string",
+      "timestamp": "int"
+    },
     "notes": "读取系统时间."
   },
   {
     "path": "/api/set/time",
-    "methods": ["POST"],
+    "methods": [
+      "POST"
+    ],
     "auth": "required",
     "permission": "system.time.sync",
     "request": {},
-    "response": {"status": "success|error", "message": "string"},
+    "response": {
+      "status": "success|error",
+      "message": "string"
+    },
     "notes": "设备写操作 (NTP 同步系统时间). 固定命令, 不接受用户输入."
   },
   {
     "path": "/api/get/first-reboot",
-    "methods": ["GET"],
+    "methods": [
+      "GET"
+    ],
     "auth": "required",
     "permission": "system.reboot.read",
     "request": {},
-    "response": {"days": "string", "hour": "int", "minute": "int"},
+    "response": {
+      "days": "string",
+      "hour": "int",
+      "minute": "int"
+    },
     "notes": "读取定时重启配置."
   },
   {
     "path": "/api/set/reboot",
-    "methods": ["GET"],
+    "methods": [
+      "GET"
+    ],
     "auth": "required",
     "permission": "system.reboot.schedule",
-    "request": {"query": {"day": "string 逗号分隔", "hour": "int", "minute": "int"}},
-    "response": {"status": "success|error", "message": "string"},
+    "request": {
+      "query": {
+        "day": "string 逗号分隔",
+        "hour": "int",
+        "minute": "int"
+      }
+    },
+    "response": {
+      "status": "success|error",
+      "message": "string"
+    },
     "notes": "设备写操作但旧版用 GET + query 参数 (useApi.js setReboot). 保留 GET 以兼容前端; Rust 侧建议同时支持 POST 并逐步切换. 参数需范围校验 (hour 0-23, minute 0-59)."
   },
   {
     "path": "/api/claen/cron",
-    "methods": ["GET"],
+    "methods": [
+      "GET"
+    ],
     "auth": "required",
     "permission": "system.reboot.clear",
     "request": {},
-    "response": {"status": "success|error", "message": "string"},
+    "response": {
+      "status": "success|error",
+      "message": "string"
+    },
     "notes": "设备写操作, 原始拼写 claen (旧版拼写错误) 必须原样保留. 清除定时任务."
   },
   {
     "path": "/api/charge/config",
-    "methods": ["GET", "POST"],
+    "methods": [
+      "GET",
+      "POST"
+    ],
     "auth": "public-get",
     "permission": "charge.config.read, charge.config.write",
-    "request": {"enabled": "bool (POST)", "startThreshold": "int (POST)", "stopThreshold": "int (POST)"},
-    "response": {"enabled": "bool", "startThreshold": "int", "stopThreshold": "int", "capacity": "int"},
+    "request": {
+      "enabled": "bool (POST)",
+      "startThreshold": "int (POST)",
+      "stopThreshold": "int (POST)"
+    },
+    "response": {
+      "enabled": "bool",
+      "startThreshold": "int",
+      "stopThreshold": "int",
+      "capacity": "int"
+    },
     "notes": "GET 免认证 (对齐旧版白名单), POST 必须认证: auth=public-get 语义即仅 GET 公开、其余方法 required. 阈值需 0-100 校验."
   },
   {
     "path": "/api/charge/on",
-    "methods": ["POST"],
+    "methods": [
+      "POST"
+    ],
     "auth": "required",
     "permission": "charge.control.on",
     "request": {},
-    "response": {"status": "success|error", "message": "string"},
+    "response": {
+      "status": "success|error",
+      "message": "string"
+    },
     "notes": "设备写操作. 固定命令, 无用户输入."
   },
   {
     "path": "/api/charge/off",
-    "methods": ["POST"],
+    "methods": [
+      "POST"
+    ],
     "auth": "required",
     "permission": "charge.control.off",
     "request": {},
-    "response": {"status": "success|error", "message": "string"},
+    "response": {
+      "status": "success|error",
+      "message": "string"
+    },
     "notes": "设备写操作. 固定命令, 无用户输入."
   },
   {
     "path": "/api/sms",
-    "methods": ["GET"],
+    "methods": [
+      "GET"
+    ],
     "auth": "required",
     "permission": "sms.read",
     "request": {},
-    "response": {"sms": "array<object{id,sender,content,timestamp,is_read}>"},
+    "response": {
+      "sms": "array<object{id,sender,content,timestamp,is_read}>"
+    },
     "notes": "短信列表. 短信正文属敏感数据, 日志与审计不得记录正文."
   },
   {
     "path": "/api/sms/send",
-    "methods": ["POST"],
+    "methods": [
+      "POST"
+    ],
     "auth": "required",
     "permission": "sms.send",
-    "request": {"recipient": "string", "content": "string"},
-    "response": {"status": "success|error", "message": "string"},
+    "request": {
+      "recipient": "string",
+      "content": "string"
+    },
+    "response": {
+      "status": "success|error",
+      "message": "string"
+    },
     "notes": "设备写操作. 防重复提交 (幂等键), 收件人格式与正文长度上限校验; 日志脱敏不记正文."
   },
   {
     "path": "/api/sms/sent",
-    "methods": ["GET"],
+    "methods": [
+      "GET"
+    ],
     "auth": "required",
     "permission": "sms.sent.read",
     "request": {},
-    "response": {"sent": "array<object{id,recipient,content,timestamp,status}>"},
+    "response": {
+      "sent": "array<object{id,recipient,content,timestamp,status}>"
+    },
     "notes": "已发送短信列表, 日志脱敏."
   },
   {
     "path": "/api/sms/sent/:id",
-    "methods": ["DELETE"],
+    "methods": [
+      "DELETE"
+    ],
     "auth": "required",
     "permission": "sms.sent.delete",
-    "request": {"id": "int (path)"},
-    "response": {"status": "success|error", "message": "string"},
+    "request": {
+      "id": "int (path)"
+    },
+    "response": {
+      "status": "success|error",
+      "message": "string"
+    },
     "notes": "由旧 C 路由 /api/sms/sent/* 归一化而来. id 为整数, 参数化查询."
   },
   {
     "path": "/api/sms/config",
-    "methods": ["GET", "POST"],
+    "methods": [
+      "GET",
+      "POST"
+    ],
     "auth": "required",
     "permission": "sms.config.read, sms.config.write",
-    "request": {"max_count": "int (POST)", "max_sent_count": "int (POST)"},
-    "response": {"max_count": "int", "max_sent_count": "int"},
+    "request": {
+      "max_count": "int (POST)",
+      "max_sent_count": "int (POST)"
+    },
+    "response": {
+      "max_count": "int",
+      "max_sent_count": "int"
+    },
     "notes": "GET 读取 / POST 保存短信配置, 均需认证."
   },
   {
     "path": "/api/sms/webhook",
-    "methods": ["GET", "POST"],
+    "methods": [
+      "GET",
+      "POST"
+    ],
     "auth": "required",
     "permission": "sms.webhook.read, sms.webhook.write",
-    "request": {"enabled": "bool (POST)", "platform": "string (POST)", "url": "string (POST)", "body": "string (POST)", "headers": "string (POST)"},
-    "response": {"enabled": "bool", "platform": "string", "url": "string", "body": "string", "headers": "string"},
+    "request": {
+      "enabled": "bool (POST)",
+      "platform": "string (POST)",
+      "url": "string (POST)",
+      "body": "string (POST)",
+      "headers": "string (POST)"
+    },
+    "response": {
+      "enabled": "bool",
+      "platform": "string",
+      "url": "string",
+      "body": "string",
+      "headers": "string"
+    },
     "notes": "报告 08 章高危项: 旧版 Webhook URL / Header 进入 Shell 命令字符串. 新版改用 HTTP 客户端 (reqwest), 校验目标地址防 SSRF, 限制响应体与连接超时."
   },
   {
     "path": "/api/sms/webhook/test",
-    "methods": ["POST"],
+    "methods": [
+      "POST"
+    ],
     "auth": "required",
     "permission": "sms.webhook.test",
     "request": {},
-    "response": {"status": "success|error", "message": "string"},
+    "response": {
+      "status": "success|error",
+      "message": "string"
+    },
     "notes": "设备写操作. 触发一次 Webhook 测试投递, 走 HTTP 客户端 + SSRF 防护, 不得拼 Shell."
   },
   {
     "path": "/api/sms/webhook/logs",
-    "methods": ["GET"],
+    "methods": [
+      "GET"
+    ],
     "auth": "required",
     "permission": "sms.webhook.logs.read",
     "request": {},
-    "response": {"logs": "array<object>"},
+    "response": {
+      "logs": "array<object>"
+    },
     "notes": "Webhook 投递日志, 响应体含 URL 等需脱敏."
   },
   {
     "path": "/api/sms/fix",
-    "methods": ["GET", "POST"],
+    "methods": [
+      "GET",
+      "POST"
+    ],
     "auth": "required",
     "permission": "sms.fix.read, sms.fix.write",
-    "request": {"enabled": "bool (POST)"},
-    "response": {"enabled": "bool"},
+    "request": {
+      "enabled": "bool (POST)"
+    },
+    "response": {
+      "enabled": "bool"
+    },
     "notes": "短信修复开关读取 / 设置, 均需认证."
   },
   {
     "path": "/api/sms/:id",
-    "methods": ["DELETE"],
+    "methods": [
+      "DELETE"
+    ],
     "auth": "required",
     "permission": "sms.delete",
-    "request": {"id": "int (path)"},
-    "response": {"status": "success|error", "message": "string"},
+    "request": {
+      "id": "int (path)"
+    },
+    "response": {
+      "status": "success|error",
+      "message": "string"
+    },
     "notes": "由旧 C 路由 /api/sms/* 归一化而来. 注意该通配路由会兜底匹配未列出的 /api/sms/ 子路径, 新版须用精确路由替代. id 参数化查询."
   },
   {
     "path": "/api/update/version",
-    "methods": ["GET"],
+    "methods": [
+      "GET"
+    ],
     "auth": "required",
     "permission": "ota.version.read",
     "request": {},
-    "response": {"version": "string"},
+    "response": {
+      "version": "string"
+    },
     "notes": "读取当前固件版本."
   },
   {
     "path": "/api/update/upload",
-    "methods": ["POST"],
+    "methods": [
+      "POST"
+    ],
     "auth": "required",
     "permission": "ota.upload",
-    "request": {"multipart": "file (更新包 zip)"},
-    "response": {"status": "success|error", "message": "string", "size": "int"},
+    "request": {
+      "multipart": "file (更新包 zip)"
+    },
+    "response": {
+      "status": "success|error",
+      "message": "string",
+      "size": "int"
+    },
     "notes": "设备写操作 + 高危. 须校验签名/摘要、限制体积、原子写入临时目录、非执行存储; 禁止直接执行上传包内脚本."
   },
   {
     "path": "/api/update/download",
-    "methods": ["POST"],
+    "methods": [
+      "POST"
+    ],
     "auth": "required",
     "permission": "ota.download",
-    "request": {"url": "string"},
-    "response": {"status": "success|error", "message": "string"},
+    "request": {
+      "url": "string"
+    },
+    "response": {
+      "status": "success|error",
+      "message": "string"
+    },
     "notes": "报告 08 章高危项: 旧版 curl -k / wget --no-check-certificate 跳过证书验证. 新版恢复 TLS 证书校验、URL allowlist (禁止内网/元数据地址)、连接与整体超时、下载体大小上限."
   },
   {
     "path": "/api/update/extract",
-    "methods": ["POST"],
+    "methods": [
+      "POST"
+    ],
     "auth": "required",
     "permission": "ota.extract",
     "request": {},
-    "response": {"status": "success|error", "message": "string"},
+    "response": {
+      "status": "success|error",
+      "message": "string"
+    },
     "notes": "设备写操作. 解压须防 Zip Slip 路径穿越, 固定目标目录, 条目数与解压后体积上限."
   },
   {
     "path": "/api/update/install",
-    "methods": ["POST"],
+    "methods": [
+      "POST"
+    ],
     "auth": "required",
     "permission": "ota.install",
     "request": {},
-    "response": {"status": "success|error", "message": "string", "output": "string"},
+    "response": {
+      "status": "success|error",
+      "message": "string",
+      "output": "string"
+    },
     "notes": "设备写操作 + 最高危. 须验证签名/摘要后方可执行; 采用 A/B 或备份 + 原子替换, 失败自动回滚到可启动版本; 重启前确认授权并写审计日志."
   },
   {
     "path": "/api/update/check",
-    "methods": ["GET"],
+    "methods": [
+      "GET"
+    ],
     "auth": "required",
     "permission": "ota.check",
     "request": {},
-    "response": {"current_version": "string", "latest_version": "string", "has_update": "bool", "url": "string", "changelog": "string", "size": "int", "required": "bool"},
+    "response": {
+      "current_version": "string",
+      "latest_version": "string",
+      "has_update": "bool",
+      "url": "string",
+      "changelog": "string",
+      "size": "int",
+      "required": "bool"
+    },
     "notes": "旧版用 HTTP_CHECK_ANY, 实际按 GET 调用. 检查远端版本须走 TLS 校验的 HTTP 客户端, 校验响应体大小与超时; 版本检查 URL 由服务端配置, 不接受任意 URL."
   },
   {
     "path": "/api/usb/mode",
-    "methods": ["GET", "POST"],
+    "methods": [
+      "GET",
+      "POST"
+    ],
     "auth": "required",
     "permission": "usb.mode.read, usb.mode.write",
-    "request": {"mode": "string (POST)", "permanent": "bool (POST)"},
-    "response": {"mode": "string"},
+    "request": {
+      "mode": "string (POST)",
+      "permanent": "bool (POST)"
+    },
+    "response": {
+      "mode": "string"
+    },
     "notes": "GET 读取 / POST 设置 USB 模式, 均需认证. mode 必须枚举白名单."
   },
   {
     "path": "/api/usb-advance",
-    "methods": ["POST"],
+    "methods": [
+      "POST"
+    ],
     "auth": "required",
     "permission": "usb.mode.hot_switch",
-    "request": {"mode": "string"},
-    "response": {"status": "success|error", "message": "string"},
+    "request": {
+      "mode": "string"
+    },
+    "response": {
+      "status": "success|error",
+      "message": "string"
+    },
     "notes": "设备写操作 (USB 热切换立即生效). mode 枚举校验, 固定 argv."
   },
   {
     "path": "/api/data",
-    "methods": ["GET", "POST"],
+    "methods": [
+      "GET",
+      "POST"
+    ],
     "auth": "required",
     "permission": "data.connection.read, data.connection.write",
-    "request": {"active": "bool (POST)"},
-    "response": {"active": "bool"},
+    "request": {
+      "active": "bool (POST)"
+    },
+    "response": {
+      "active": "bool"
+    },
     "notes": "GET 读取 / POST 设置数据连接, 均需认证."
   },
   {
     "path": "/api/roaming",
-    "methods": ["GET", "POST"],
+    "methods": [
+      "GET",
+      "POST"
+    ],
     "auth": "required",
     "permission": "data.roaming.read, data.roaming.write",
-    "request": {"allowed": "bool (POST)"},
-    "response": {"allowed": "bool"},
+    "request": {
+      "allowed": "bool (POST)"
+    },
+    "response": {
+      "allowed": "bool"
+    },
     "notes": "GET 读取 / POST 设置漫游允许, 均需认证."
   },
   {
     "path": "/api/netif/list",
-    "methods": ["GET"],
+    "methods": [
+      "GET"
+    ],
     "auth": "required",
     "permission": "netif.read",
     "request": {},
-    "response": {"interfaces": "array<object>"},
+    "response": {
+      "interfaces": "array<object>"
+    },
     "notes": "网络接口列表."
   },
   {
     "path": "/api/netif/stats",
-    "methods": ["POST"],
+    "methods": [
+      "POST"
+    ],
     "auth": "required",
     "permission": "netif.read",
-    "request": {"interface": "string"},
-    "response": {"rx": "int", "tx": "int"},
+    "request": {
+      "interface": "string"
+    },
+    "response": {
+      "rx": "int",
+      "tx": "int"
+    },
     "notes": "读取指定接口流量. interface 必须匹配已知接口名 allowlist, 不得拼进 Shell."
   },
   {
     "path": "/api/netif/monitor",
-    "methods": ["POST"],
+    "methods": [
+      "POST"
+    ],
     "auth": "required",
     "permission": "netif.monitor.write",
-    "request": {"interface": "string", "enabled": "bool"},
-    "response": {"status": "success|error", "message": "string"},
+    "request": {
+      "interface": "string",
+      "enabled": "bool"
+    },
+    "response": {
+      "status": "success|error",
+      "message": "string"
+    },
     "notes": "设备写操作. interface allowlist + 固定 argv."
   },
   {
     "path": "/api/apn",
-    "methods": ["GET", "POST"],
+    "methods": [
+      "GET",
+      "POST"
+    ],
     "auth": "required",
     "permission": "apn.config.read, apn.config.write",
-    "request": {"apn": "string (POST)", "protocol": "string (POST)", "username": "string (POST)", "password": "string (POST)", "auth_method": "string (POST)"},
-    "response": {"apn": "object"},
+    "request": {
+      "apn": "string (POST)",
+      "protocol": "string (POST)",
+      "username": "string (POST)",
+      "password": "string (POST)",
+      "auth_method": "string (POST)"
+    },
+    "response": {
+      "apn": "object"
+    },
     "notes": "前端 useApi.js getApnList()/setApnConfig() 仍调用此路径, 但旧 C 源码中该 mg_match 路由已被注释掉 (实际生效的是 /api/apn/config 等). 列为兼容别名: Rust 侧可补该别名并内部转发到 config, 或前端改调用 /api/apn/config. verify.py 会将 C 源码注释路由容错跳过."
   },
   {
     "path": "/api/apn/config",
-    "methods": ["GET", "POST"],
+    "methods": [
+      "GET",
+      "POST"
+    ],
     "auth": "required",
     "permission": "apn.config.read, apn.config.write",
-    "request": {"mode": "int (POST)", "template_id": "int (POST)", "auto_start": "int (POST)"},
-    "response": {"mode": "int", "template_id": "int", "auto_start": "int"},
+    "request": {
+      "mode": "int (POST)",
+      "template_id": "int (POST)",
+      "auto_start": "int (POST)"
+    },
+    "response": {
+      "mode": "int",
+      "template_id": "int",
+      "auto_start": "int"
+    },
     "notes": "APN 配置读取 / 保存, 均需认证. password 等字段参数化入库, 日志脱敏."
   },
   {
     "path": "/api/apn/templates",
-    "methods": ["GET", "POST"],
+    "methods": [
+      "GET",
+      "POST"
+    ],
     "auth": "required",
     "permission": "apn.template.read, apn.template.create",
-    "request": {"name": "string (POST)", "apn": "string (POST)", "protocol": "string (POST)", "username": "string (POST)", "password": "string (POST)", "auth_method": "string (POST)"},
-    "response": {"templates": "array<object>"},
+    "request": {
+      "name": "string (POST)",
+      "apn": "string (POST)",
+      "protocol": "string (POST)",
+      "username": "string (POST)",
+      "password": "string (POST)",
+      "auth_method": "string (POST)"
+    },
+    "response": {
+      "templates": "array<object>"
+    },
     "notes": "APN 模板列表 / 新建, 均需认证. 字段参数化查询, 禁止 sh -c 拼接."
   },
   {
     "path": "/api/apn/templates/:id",
-    "methods": ["PUT", "DELETE"],
+    "methods": [
+      "PUT",
+      "DELETE"
+    ],
     "auth": "required",
     "permission": "apn.template.update, apn.template.delete",
-    "request": {"id": "int (path)", "name": "string (PUT)", "apn": "string (PUT)", "protocol": "string (PUT)", "username": "string (PUT)", "password": "string (PUT)", "auth_method": "string (PUT)"},
-    "response": {"status": "success|error", "message": "string"},
+    "request": {
+      "id": "int (path)",
+      "name": "string (PUT)",
+      "apn": "string (PUT)",
+      "protocol": "string (PUT)",
+      "username": "string (PUT)",
+      "password": "string (PUT)",
+      "auth_method": "string (PUT)"
+    },
+    "response": {
+      "status": "success|error",
+      "message": "string"
+    },
     "notes": "由旧 C 路由 /api/apn/templates/* 归一化而来. id 为整数, 参数化查询."
   },
   {
     "path": "/api/apn/apply",
-    "methods": ["POST"],
+    "methods": [
+      "POST"
+    ],
     "auth": "required",
     "permission": "apn.apply",
-    "request": {"template_id": "int"},
-    "response": {"status": "success|error", "message": "string"},
+    "request": {
+      "template_id": "int"
+    },
+    "response": {
+      "status": "success|error",
+      "message": "string"
+    },
     "notes": "设备写操作. 套用 APN 模板, template_id 参数化."
   },
   {
     "path": "/api/apn/clear",
-    "methods": ["POST"],
+    "methods": [
+      "POST"
+    ],
     "auth": "required",
     "permission": "apn.clear",
     "request": {},
-    "response": {"status": "success|error", "message": "string"},
+    "response": {
+      "status": "success|error",
+      "message": "string"
+    },
     "notes": "设备写操作. 清除当前 APN 配置."
   },
   {
     "path": "/api/shell",
-    "methods": ["POST"],
+    "methods": [
+      "POST"
+    ],
     "auth": "required",
     "permission": "shell.execute",
-    "request": {"command": "string"},
-    "response": {"Code": "0|1", "Error": "string", "Data": "string"},
+    "request": {
+      "command": "string"
+    },
+    "response": {
+      "Code": "0|1",
+      "Error": "string",
+      "Data": "string"
+    },
     "notes": "用户明确要求保留 Web 任意 Shell. 作为独立、显式的高风险管理员诊断通道: 有效 Token + shell.execute 细粒度权限; 登录失败限速 + 速率限制 + 命令长度上限; tokio::time::timeout + kill_on_drop + 进程组清理; stdout/stderr 输出上限; 并发上限; 独立审计日志 (actor/时间/命令/退出码/时长, 绝不记密码与 Token); 可配置开关 shell.enabled (默认启用). 详见 docs/SECURITY.md 第 3 项威胁模型."
   },
   {
     "path": "/api/plugins/all",
-    "methods": ["DELETE"],
+    "methods": [
+      "DELETE"
+    ],
     "auth": "required",
     "permission": "plugin.delete_all",
     "request": {},
-    "response": {"status": "success|error", "message": "string"},
+    "response": {
+      "status": "success|error",
+      "message": "string"
+    },
     "notes": "设备写操作. 删除全部插件 (保留内置 _default 插件), 需二次确认与审计."
   },
   {
     "path": "/api/plugins",
-    "methods": ["GET", "POST"],
+    "methods": [
+      "GET",
+      "POST"
+    ],
     "auth": "required",
     "permission": "plugin.read, plugin.write",
-    "request": {"name": "string (POST)", "content": "string (POST)"},
-    "response": {"plugins": "array<object{filename,name,version,author,description,icon,color,content}>"},
+    "request": {
+      "name": "string (POST)",
+      "content": "string (POST)"
+    },
+    "response": {
+      "plugins": "array<object{filename,name,version,author,description,icon,color,content}>"
+    },
     "notes": "GET 列表 / POST 上传, 均需认证. 报告 08 章: 文件名 allowlist (禁止 .. 与路径分隔)、目录约束、原子写入、非执行存储; 插件不再以任意 JS 在宿主执行, 改为受限 UI 描述协议."
   },
   {
     "path": "/api/plugins/:name",
-    "methods": ["DELETE"],
+    "methods": [
+      "DELETE"
+    ],
     "auth": "required",
     "permission": "plugin.delete",
-    "request": {"name": "string (path)"},
-    "response": {"status": "success|error", "message": "string"},
+    "request": {
+      "name": "string (path)"
+    },
+    "response": {
+      "status": "success|error",
+      "message": "string"
+    },
     "notes": "由旧 C 路由 /api/plugins/* 归一化而来. name 必须 allowlist 校验 (仅字母数字下划线连字符 + .js), 防路径穿越."
   },
   {
     "path": "/api/plugins/storage/:name",
-    "methods": ["GET", "POST", "DELETE"],
+    "methods": [
+      "GET",
+      "POST",
+      "DELETE"
+    ],
     "auth": "required",
     "permission": "plugin.storage.read, plugin.storage.write, plugin.storage.delete",
-    "request": {"name": "string (path)", "data": "object (POST)"},
-    "response": {"data": "object"},
+    "request": {
+      "name": "string (path)",
+      "data": "object (POST)"
+    },
+    "response": {
+      "data": "object"
+    },
     "notes": "由旧 C 路由 /api/plugins/storage/* 归一化而来. 插件数据按插件 ID 隔离, 配额与大小上限; name allowlist. 注意旧版该路由位于 /api/plugins/* 之后易被兜底误匹配, 新版须精确路由优先."
   },
   {
     "path": "/api/scripts",
-    "methods": ["GET", "POST"],
+    "methods": [
+      "GET",
+      "POST"
+    ],
     "auth": "required",
     "permission": "script.read, script.write",
-    "request": {"name": "string (POST)", "content": "string (POST)"},
-    "response": {"scripts": "array<object>"},
+    "request": {
+      "name": "string (POST)",
+      "content": "string (POST)"
+    },
+    "response": {
+      "scripts": "array<object>"
+    },
     "notes": "报告 08 章高危项: 旧版脚本上传直接拼接用户提供文件名并设置执行权限. 新版: 文件名 allowlist、目录约束、原子写入、非执行存储 (不设 x 位); 脚本执行另设权限审批 (script.execute), 默认不执行."
   },
   {
     "path": "/api/scripts/:name",
-    "methods": ["PUT", "DELETE"],
+    "methods": [
+      "PUT",
+      "DELETE"
+    ],
     "auth": "required",
     "permission": "script.update, script.delete",
-    "request": {"name": "string (path)", "content": "string (PUT)"},
-    "response": {"status": "success|error", "message": "string"},
+    "request": {
+      "name": "string (path)",
+      "content": "string (PUT)"
+    },
+    "response": {
+      "status": "success|error",
+      "message": "string"
+    },
     "notes": "由旧 C 路由 /api/scripts/* 归一化而来. name allowlist, 非执行存储."
   },
   {
-    "path": "/api/security/status",
-    "methods": ["GET"],
-    "auth": "required",
-    "permission": "security.read",
-    "request": {},
-    "response": {"is_set": "bool", "created_at": "int"},
-    "notes": "密保是否已设置. 需认证."
-  },
-  {
-    "path": "/api/security/setup",
-    "methods": ["POST"],
-    "auth": "required",
-    "permission": "security.setup",
-    "request": {"question1": "string", "answer1": "string", "question2": "string", "answer2": "string"},
-    "response": {"status": "success|error", "message": "string"},
-    "notes": "设置密保问题 (仅允许设置一次). 答案须加盐哈希 (旧版为无盐 SHA256), 参数化入库, 日志不得记录答案明文."
-  },
-  {
-    "path": "/api/security/questions",
-    "methods": ["GET"],
-    "auth": "public",
-    "permission": "security.questions.read",
-    "request": {},
-    "response": {"question1": "string", "question2": "string"},
-    "notes": "忘记密码流程入口, GET 免认证. 仅返回问题文本, 绝不返回答案或哈希; 须配合限速防爆破."
-  },
-  {
-    "path": "/api/security/verify",
-    "methods": ["POST"],
-    "auth": "public",
-    "permission": "security.verify",
-    "request": {"answer1": "string", "answer2": "string", "confirm": "string"},
-    "response": {"status": "success|error", "message": "string"},
-    "notes": "忘记密码流程的密保校验入口, 协议上必须免认证. 强制登录/校验失败限速、尝试次数上限与确认文本校验; 答案加盐哈希比对; 日志脱敏."
-  },
-  {
-    "path": "/api/security/reset-password",
-    "methods": ["POST"],
-    "auth": "public",
-    "permission": "security.password.reset",
-    "request": {"answer1": "string", "answer2": "string", "confirm": "string"},
-    "response": {"status": "success|error", "message": "string"},
-    "notes": "忘记密码流程的重置入口, 协议上必须免认证 (否则设备锁死无法恢复). 前置 security.verify 校验 + 严格限速 + 审计; 重置后清除全部 Token. 属经审查的公开写入口豁免项."
-  },
-  {
-    "path": "/api/security/factory-reset",
-    "methods": ["POST"],
-    "auth": "required",
-    "permission": "security.factory_reset",
-    "request": {"answer1": "string", "answer2": "string", "confirm": "string"},
-    "response": {"status": "success|error", "message": "string"},
-    "notes": "设备写操作 + 最高危: 恢复出厂设置并重启. 必须有效 Token + 密保校验 + 二次确认 + 独立审计; 旧版直接 system(reboot) 且清表 SQL 由拼接生成, 新版用参数化与固定命令."
-  },
-  {
     "path": "/api/rathole/config",
-    "methods": ["GET", "POST"],
+    "methods": [
+      "GET",
+      "POST"
+    ],
     "auth": "required",
     "permission": "rathole.config.read, rathole.config.write",
-    "request": {"server_addr": "string (POST)", "auto_start": "int (POST)", "enabled": "int (POST)"},
-    "response": {"server_addr": "string", "auto_start": "int", "enabled": "int"},
+    "request": {
+      "server_addr": "string (POST)",
+      "auto_start": "int (POST)",
+      "enabled": "int (POST)"
+    },
+    "response": {
+      "server_addr": "string",
+      "auto_start": "int",
+      "enabled": "int"
+    },
     "notes": "内网穿透客户端配置读取 / 保存, 均需认证. server_addr 需地址校验, 参数化入库."
   },
   {
     "path": "/api/rathole/services",
-    "methods": ["GET", "POST"],
+    "methods": [
+      "GET",
+      "POST"
+    ],
     "auth": "required",
     "permission": "rathole.service.read, rathole.service.create",
-    "request": {"name": "string (POST)", "token": "string (POST)", "local_addr": "string (POST)"},
-    "response": {"services": "array<object>"},
+    "request": {
+      "name": "string (POST)",
+      "token": "string (POST)",
+      "local_addr": "string (POST)"
+    },
+    "response": {
+      "services": "array<object>"
+    },
     "notes": "服务列表 / 新增, 均需认证. token 为穿透密钥, 日志与响应须脱敏."
   },
   {
     "path": "/api/rathole/services/:service_id",
-    "methods": ["PUT", "DELETE"],
+    "methods": [
+      "PUT",
+      "DELETE"
+    ],
     "auth": "required",
     "permission": "rathole.service.update, rathole.service.delete",
-    "request": {"service_id": "int (path)", "name": "string (PUT)", "token": "string (PUT)", "local_addr": "string (PUT)", "enabled": "int (PUT)"},
-    "response": {"status": "success|error", "message": "string"},
+    "request": {
+      "service_id": "int (path)",
+      "name": "string (PUT)",
+      "token": "string (PUT)",
+      "local_addr": "string (PUT)",
+      "enabled": "int (PUT)"
+    },
+    "response": {
+      "status": "success|error",
+      "message": "string"
+    },
     "notes": "由旧 C 路由 /api/rathole/services/* 归一化而来. service_id 参数化查询."
   },
   {
     "path": "/api/rathole/start",
-    "methods": ["POST"],
+    "methods": [
+      "POST"
+    ],
     "auth": "required",
     "permission": "rathole.control.start",
     "request": {},
-    "response": {"status": "success|error", "message": "string"},
+    "response": {
+      "status": "success|error",
+      "message": "string"
+    },
     "notes": "设备写操作. 启动穿透进程, 固定 argv + 超时 + kill_on_drop."
   },
   {
     "path": "/api/rathole/stop",
-    "methods": ["POST"],
+    "methods": [
+      "POST"
+    ],
     "auth": "required",
     "permission": "rathole.control.stop",
     "request": {},
-    "response": {"status": "success|error", "message": "string"},
+    "response": {
+      "status": "success|error",
+      "message": "string"
+    },
     "notes": "设备写操作. 停止穿透进程."
   },
   {
     "path": "/api/rathole/status",
-    "methods": ["GET"],
+    "methods": [
+      "GET"
+    ],
     "auth": "required",
     "permission": "rathole.status.read",
     "request": {},
-    "response": {"running": "bool", "pid": "int"},
+    "response": {
+      "running": "bool",
+      "pid": "int"
+    },
     "notes": "读取穿透运行状态."
   },
   {
     "path": "/api/rathole/logs",
-    "methods": ["GET"],
+    "methods": [
+      "GET"
+    ],
     "auth": "required",
     "permission": "rathole.logs.read",
     "request": {},
-    "response": {"logs": "string"},
+    "response": {
+      "logs": "string"
+    },
     "notes": "读取穿透日志, 输出大小上限, 日志脱敏 (不含 token)."
   },
   {
     "path": "/api/rathole/server-config",
-    "methods": ["GET"],
+    "methods": [
+      "GET"
+    ],
     "auth": "required",
     "permission": "rathole.server_config.read",
     "request": {},
-    "response": {"config": "string"},
+    "response": {
+      "config": "string"
+    },
     "notes": "读取服务端配置片段 (旧版 handler 为 GET). 若含密钥须脱敏."
   },
   {
     "path": "/api/rathole/autostart",
-    "methods": ["POST"],
+    "methods": [
+      "POST"
+    ],
     "auth": "required",
     "permission": "rathole.autostart.write",
-    "request": {"auto_start": "int"},
-    "response": {"status": "success|error", "message": "string"},
+    "request": {
+      "auto_start": "int"
+    },
+    "response": {
+      "status": "success|error",
+      "message": "string"
+    },
     "notes": "设备写操作. 设置开机自启, auto_start 为 0/1 枚举."
   },
   {
     "path": "/api/ipv6-proxy/config",
-    "methods": ["GET", "POST"],
+    "methods": [
+      "GET",
+      "POST"
+    ],
     "auth": "required",
     "permission": "ipv6proxy.config.read, ipv6proxy.config.write",
-    "request": {"enabled": "int (POST)", "auto_start": "int (POST)", "send_enabled": "int (POST)", "send_interval": "int (POST)", "webhook_url": "string (POST)", "webhook_body": "string (POST)", "webhook_headers": "string (POST)"},
-    "response": {"enabled": "int", "auto_start": "int", "send_enabled": "int", "send_interval": "int", "webhook_url": "string", "webhook_body": "string", "webhook_headers": "string"},
+    "request": {
+      "enabled": "int (POST)",
+      "auto_start": "int (POST)",
+      "send_enabled": "int (POST)",
+      "send_interval": "int (POST)",
+      "webhook_url": "string (POST)",
+      "webhook_body": "string (POST)",
+      "webhook_headers": "string (POST)"
+    },
+    "response": {
+      "enabled": "int",
+      "auto_start": "int",
+      "send_enabled": "int",
+      "send_interval": "int",
+      "webhook_url": "string",
+      "webhook_body": "string",
+      "webhook_headers": "string"
+    },
     "notes": "IPv6 代理配置读取 / 保存, 均需认证. webhook_url 需 SSRF 校验, 参数化入库."
   },
   {
     "path": "/api/ipv6-proxy/rules",
-    "methods": ["GET", "POST"],
+    "methods": [
+      "GET",
+      "POST"
+    ],
     "auth": "required",
     "permission": "ipv6proxy.rule.read, ipv6proxy.rule.create",
-    "request": {"local_port": "int (POST)", "ipv6_port": "int (POST)"},
-    "response": {"rules": "array<object>"},
+    "request": {
+      "local_port": "int (POST)",
+      "ipv6_port": "int (POST)"
+    },
+    "response": {
+      "rules": "array<object>"
+    },
     "notes": "转发规则列表 / 新增, 均需认证. 端口范围 1-65535 校验, 参数化入库."
   },
   {
     "path": "/api/ipv6-proxy/rules/:rule_id",
-    "methods": ["PUT", "DELETE"],
+    "methods": [
+      "PUT",
+      "DELETE"
+    ],
     "auth": "required",
     "permission": "ipv6proxy.rule.update, ipv6proxy.rule.delete",
-    "request": {"rule_id": "int (path)", "local_port": "int (PUT)", "ipv6_port": "int (PUT)", "enabled": "int (PUT)"},
-    "response": {"status": "success|error", "message": "string"},
+    "request": {
+      "rule_id": "int (path)",
+      "local_port": "int (PUT)",
+      "ipv6_port": "int (PUT)",
+      "enabled": "int (PUT)"
+    },
+    "response": {
+      "status": "success|error",
+      "message": "string"
+    },
     "notes": "由旧 C 路由 /api/ipv6-proxy/rules/* 归一化而来. rule_id 参数化查询."
   },
   {
     "path": "/api/ipv6-proxy/start",
-    "methods": ["POST"],
+    "methods": [
+      "POST"
+    ],
     "auth": "required",
     "permission": "ipv6proxy.control.start",
     "request": {},
-    "response": {"status": "success|error", "message": "string"},
+    "response": {
+      "status": "success|error",
+      "message": "string"
+    },
     "notes": "设备写操作. 启动代理进程, 固定 argv + 超时."
   },
   {
     "path": "/api/ipv6-proxy/stop",
-    "methods": ["POST"],
+    "methods": [
+      "POST"
+    ],
     "auth": "required",
     "permission": "ipv6proxy.control.stop",
     "request": {},
-    "response": {"status": "success|error", "message": "string"},
+    "response": {
+      "status": "success|error",
+      "message": "string"
+    },
     "notes": "设备写操作. 停止代理进程."
   },
   {
     "path": "/api/ipv6-proxy/restart",
-    "methods": ["POST"],
+    "methods": [
+      "POST"
+    ],
     "auth": "required",
     "permission": "ipv6proxy.control.restart",
     "request": {},
-    "response": {"status": "success|error", "message": "string"},
+    "response": {
+      "status": "success|error",
+      "message": "string"
+    },
     "notes": "设备写操作. 重启代理进程."
   },
   {
     "path": "/api/ipv6-proxy/status",
-    "methods": ["GET"],
+    "methods": [
+      "GET"
+    ],
     "auth": "required",
     "permission": "ipv6proxy.status.read",
     "request": {},
-    "response": {"running": "bool"},
+    "response": {
+      "running": "bool"
+    },
     "notes": "读取代理运行状态."
   },
   {
     "path": "/api/ipv6-proxy/send",
-    "methods": ["POST"],
+    "methods": [
+      "POST"
+    ],
     "auth": "required",
     "permission": "ipv6proxy.send",
     "request": {},
-    "response": {"status": "success|error", "message": "string"},
+    "response": {
+      "status": "success|error",
+      "message": "string"
+    },
     "notes": "设备写操作. 主动上报当前 IPv6 地址到 Webhook, 走 HTTP 客户端 + SSRF 防护 + 响应体上限 + 连接超时."
   },
   {
     "path": "/api/ipv6-proxy/test",
-    "methods": ["POST"],
+    "methods": [
+      "POST"
+    ],
     "auth": "required",
     "permission": "ipv6proxy.test",
     "request": {},
-    "response": {"status": "success|error", "message": "string"},
+    "response": {
+      "status": "success|error",
+      "message": "string"
+    },
     "notes": "设备写操作. 连通性测试, 走 HTTP 客户端, 禁止拼 Shell."
   },
   {
     "path": "/api/ipv6-proxy/send-logs",
-    "methods": ["GET"],
+    "methods": [
+      "GET"
+    ],
     "auth": "required",
     "permission": "ipv6proxy.send_logs.read",
     "request": {},
-    "response": {"logs": "array<object>"},
+    "response": {
+      "logs": "array<object>"
+    },
     "notes": "读取上报日志, 输出大小上限, 脱敏."
   },
   {
     "path": "/api/phone-case",
-    "methods": ["GET", "POST"],
+    "methods": [
+      "GET",
+      "POST"
+    ],
     "auth": "required",
     "permission": "phone_case.read, phone_case.write",
-    "request": {"enabled": "bool (POST)"},
-    "response": {"enabled": "bool", "status": "string"},
+    "request": {
+      "enabled": "bool (POST)"
+    },
+    "response": {
+      "enabled": "bool",
+      "status": "string"
+    },
     "notes": "手机壳模式读取 / 设置, 均需认证. 旧版为单 handler 按方法分发, 此处显式列出 GET/POST."
   },
   {
     "path": "/api/events",
-    "methods": ["GET"],
+    "methods": [
+      "GET"
+    ],
     "auth": "required",
     "permission": "events.subscribe",
-    "request": {"Last-Event-ID": "string (可选 header)"},
-    "response": {"Content-Type": "text/event-stream", "event": "string", "data": "object"},
+    "request": {
+      "Last-Event-ID": "string (可选 header)"
+    },
+    "response": {
+      "Content-Type": "text/event-stream",
+      "event": "string",
+      "data": "object"
+    },
     "notes": "实时状态推送 (SSE 长连接). 需有效 Token; 服务端设空闲超时 / 心跳 / 连接数上限 / 背压丢弃策略; 推送内容不得含密码、Token、短信正文、完整 AT 敏感参数. 该端点为 Rust 侧新增, 旧 C 源码无对应 mg_match 路由."
   },
   {
     "path": "/api/terminal/ws",
-    "methods": ["WS"],
+    "methods": [
+      "WS"
+    ],
     "auth": "required",
     "permission": "shell.execute",
-    "request": {"command": "string (每帧一条)"},
-    "response": {"stdout": "string", "stderr": "string", "exit_code": "int"},
+    "request": {
+      "command": "string (每帧一条)"
+    },
+    "response": {
+      "stdout": "string",
+      "stderr": "string",
+      "exit_code": "int"
+    },
     "notes": "Web 终端 (WebSocket), 用户明确要求保留. 与 /api/shell 同属高风险管理员诊断通道: 有效 Token + shell.execute; 握手后逐帧校验权限; 登录失败限速 + 速率限制 + 命令长度上限; tokio::time::timeout + kill_on_drop + 进程组清理; stdout/stderr 输出上限; 并发上限; 独立审计日志 (绝不记密码与 Token); shell.enabled 开关 (默认启用). 详见 docs/SECURITY.md."
   }
 ]

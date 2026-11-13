@@ -65,8 +65,6 @@ const SMS_SENT_LIST: &str = "SELECT id,recipient,content,at,status FROM sms_sent
 const SMS_SENT_INSERT: &str = "INSERT INTO sms_sent(id,recipient,content,at,status) VALUES(?1,?2,?3,?4,?5)";
 const SMS_SENT_DELETE: &str = "DELETE FROM sms_sent WHERE id = ?1";
 
-const SECURITY_GET: &str = "SELECT question1,answer1_hash,question2,answer2_hash,salt,updated_at FROM security WHERE id = 1";
-const SECURITY_SET: &str = "INSERT INTO security(id,question1,answer1_hash,question2,answer2_hash,salt,updated_at) VALUES(1,?1,?2,?3,?4,?5,?6) ON CONFLICT(id) DO UPDATE SET question1=excluded.question1, answer1_hash=excluded.answer1_hash, question2=excluded.question2, answer2_hash=excluded.answer2_hash, salt=excluded.salt, updated_at=excluded.updated_at";
 
 const UPDATE_GET: &str = "SELECT version,status,package_path,sha256,last_error,updated_at FROM update_state WHERE id = 1";
 const UPDATE_SET: &str = "INSERT INTO update_state(id,version,status,package_path,sha256,last_error,updated_at) VALUES(1,?1,?2,?3,?4,?5,?6) ON CONFLICT(id) DO UPDATE SET version=excluded.version, status=excluded.status, package_path=excluded.package_path, sha256=excluded.sha256, last_error=excluded.last_error, updated_at=excluded.updated_at";
@@ -465,40 +463,6 @@ impl Db {
     }
 
     // ---------------- 密保 ----------------
-
-    pub async fn security_get(&self) -> AppResult<Option<DbRow>> {
-        Ok(self
-            .query(SECURITY_GET, P::new().done())
-            .await?
-            .into_iter()
-            .next())
-    }
-
-    pub async fn security_set(
-        &self,
-        q1: &str,
-        a1_hash: &str,
-        q2: &str,
-        a2_hash: &str,
-        salt: &str,
-    ) -> AppResult<()> {
-        self.execute(
-            SECURITY_SET,
-            P::new()
-                .t(q1)
-                .t(a1_hash)
-                .t(q2)
-                .t(a2_hash)
-                .t(salt)
-                .i(now_ts())
-                .done(),
-        )
-        .await?;
-        Ok(())
-    }
-
-    // ---------------- 更新状态 ----------------
-
     pub async fn update_state_get(&self) -> AppResult<Option<DbRow>> {
         Ok(self
             .query(UPDATE_GET, P::new().done())

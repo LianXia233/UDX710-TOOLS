@@ -7,12 +7,12 @@
 //!   不能读取设备资源。
 
 use crate::config::AuthConfig;
-use crate::crypto::{constant_time_eq, hash_answer, hash_password, new_id, new_salt, new_token, sha256_hex};
+use crate::crypto::{constant_time_eq, hash_password, new_id, new_salt, new_token, sha256_hex};
 use serde_json::{json, Value};
 use udx_domain::error::{bad_request, AppError, AppResult};
 use udx_domain::models::{TokenRecord, UserRecord};
 use udx_domain::permissions::Principal;
-use udx_storage::{now_ts, row_str, Db};
+use udx_storage::{now_ts, Db};
 
 #[derive(Clone)]
 pub struct AuthService {
@@ -186,105 +186,6 @@ impl AuthService {
             &user.password_hash,
         ))
     }
-
-    // ---------------- 密保 ----------------
-
-    pub async fn security_status(&self) -> AppResult<Value> {
-        let configured = self.db.security_get().await?.is_some();
-        Ok(json!({
-            "configured": configured,
-            "failed_attempts": 0,
-            "locked_until": 0
-        }))
-    }
-
-    pub async fn security_setup(
-        &self,
-        q1: &str,
-        a1: &str,
-        q2: &str,
-        a2: &str,
-    ) -> AppResult<()> {
-        if q1.trim().is_empty() || q2.trim().is_empty() || a1.trim().is_empty() || a2.trim().is_empty() {
-            return Err(bad_request("密保问题和答案不能为空"));
-        }
-        let salt = new_salt();
-        self.db
-            .security_set(q1, &hash_answer(a1, &salt), q2, &hash_answer(a2, &salt), &salt)
-            .await
-    }
-
-    /// 公开端点：只返回问题文本，不返回答案 hash、salt 或任何设备信息。
-    pub async fn security_questions(&self) -> AppResult<Value> {
-        let Some(row) = self.db.security_get().await? else {
-            return Ok(json!({"configured": false, "question1": "", "question2": ""}));
-        };
-        Ok(json!({
-            "configured": true,
-            "question1": row_str(&row, "question1"),
-            "question2": row_str(&row, "question2")
-        }))
-    }
-
-    pub async fn security_verify(&self, a1: &str, a2: &str) -> AppResult<bool> {
-        let Some(row) = self.db.security_get().await? else {
-            return Ok(false);
-        };
-        let salt = row_str(&row, "salt");
-        let ok = constant_time_eq(&hash_answer(a1, &salt), &row_str(&row, "answer1_hash"))
-            && constant_time_eq(&hash_answer(a2, &salt), &row_str(&row, "answer2_hash"));
-        Ok(ok)
-    }
-
-    pub async fn security_reset_password(&self, a1: &str, a2: &str, confirm: &str) -> AppResult<()> {
-        if confirm != "confirm" && confirm != "true" && confirm != "1" {
-            return Err(bad_request("缺少重置确认"));
-        }
-        if !self.security_verify(a1, a2).await? {
-            return Err(AppError::Unauthorized);
-        }
-        let salt = new_salt();
-        self.db
-            .user_upsert(&UserRecord {
-                subject: "admin".to_string(),
-                password_salt: salt.clone(),
-                password_hash: hash_password(&self.cfg.default_password, &salt),
-                role: "admin".to_string(),
-                created_at: now_ts(),
-                updated_at: now_ts(),
-            })
-            .await?;
-        self.db
-            .execute(
-                "UPDATE tokens SET revoked = 1",
-                udx_storage::P::new().done(),
-            )
-            .await?;
-        Ok(())
-    }
-
-    pub async fn security_factory_reset(&self, a1: &str, a2: &str, confirm: &str) -> AppResult<()> {
-        if confirm != "confirm" && confirm != "true" && confirm != "1" {
-            return Err(bad_request("缺少恢复出厂确认"));
-        }
-        if !self.security_verify(a1, a2).await? {
-            return Err(AppError::Unauthorized);
-        }
-        // 只清理本服务管理的数据，不触碰设备分区或固件（危险实机操作需显式授权）。
-        for sql in [
-            "DELETE FROM config",
-            "DELETE FROM plugins",
-            "DELETE FROM plugin_data",
-            "DELETE FROM scripts",
-            "DELETE FROM apn_templates",
-            "DELETE FROM rathole_services",
-            "DELETE FROM ipv6_rules",
-            "DELETE FROM sms_sent",
-        ] {
-            self.db.execute(sql, udx_storage::P::new().done()).await?;
-        }
-        self.security_reset_password(a1, a2, "confirm").await
-    }
 }
 
 #[cfg(test)]
@@ -313,18 +214,4 @@ mod tests {
         assert!(auth.verify(&token).await.is_err());
     }
 
-    #[tokio::test]
-    async fn security_questions_never_leak_hashes() {
-        let db = Db::open(":memory:").unwrap();
-        let auth = AuthService::new(db, AuthConfig::default());
-        auth.security_setup("q1", "answer1", "q2", "answer2")
-            .await
-            .unwrap();
-        let q = auth.security_questions().await.unwrap();
-        let s = q.to_string();
-        assert!(!s.contains("answer1"));
-        assert!(!s.contains("hash"));
-        assert!(auth.security_verify("answer1", "answer2").await.unwrap());
-        assert!(!auth.security_verify("bad", "answer2").await.unwrap());
-    }
 }

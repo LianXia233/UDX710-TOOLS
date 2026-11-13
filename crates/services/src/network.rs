@@ -2,7 +2,7 @@
 
 use crate::crypto::new_id;
 use serde_json::{json, Value};
-use udx_domain::error::{bad_request, AppError, AppResult};
+use udx_domain::error::{bad_request, internal, AppError, AppResult};
 use udx_platform_linux::{
     interface_stats, list_interfaces, system_info, CommandRunner, FixedCommand, Sysfs,
 };
@@ -25,8 +25,51 @@ impl NetworkService {
 
     pub async fn system_info(&self, version: &str) -> AppResult<Value> {
         let info = system_info(version).await?;
-        serde_json::to_value(info)
-            .map_err(|e| AppError::Internal(format!("系统信息序列化失败: {e}")))
+        let mut value = serde_json::to_value(&info)
+            .map_err(|e| AppError::Internal(format!("系统信息序列化失败: {e}")))?;
+
+        // ---- 旧字段别名（v2.x 兼容层）----
+        // 契约（tests/contract/api_endpoints.json 的 /api/info.response）要求返回
+        // uptime / total_ram / free_ram / thermal_temp / machine 等字段，
+        // 而内部结构用 uptime_secs / mem_total_kb / mem_used_kb / temperature_c。
+        // 这里按契约补齐，保证前端与旧消费方都能取到值，不出现空白格子。
+        let obj = value
+            .as_object_mut()
+            .ok_or_else(|| AppError::Internal("系统信息不是对象".to_string()))?;
+        let mem_total_bytes = info.mem_total_kb.saturating_mul(1024);
+        let mem_used_bytes = info.mem_used_kb.saturating_mul(1024);
+        obj.insert("uptime".to_string(), json!(info.uptime_secs));
+        obj.insert("mem_total".to_string(), json!(mem_total_bytes));
+        obj.insert("mem_used".to_string(), json!(mem_used_bytes));
+        obj.insert("total_ram".to_string(), json!(mem_total_bytes));
+        obj.insert(
+            "free_ram".to_string(),
+            json!(mem_total_bytes.saturating_sub(mem_used_bytes)),
+        );
+        obj.insert(
+            "temperature".to_string(),
+            match info.temperature_c {
+                Some(t) => json!(t),
+                None => Value::Null,
+            },
+        );
+        obj.insert(
+            "thermal_temp".to_string(),
+            match info.temperature_c {
+                Some(t) => json!(t),
+                None => Value::Null,
+            },
+        );
+        obj.insert("arch".to_string(), json!(std::env::consts::ARCH));
+        obj.insert("machine".to_string(), json!(std::env::consts::ARCH));
+        obj.insert("sysname".to_string(), json!("Linux"));
+        obj.insert("release".to_string(), json!(info.kernel));
+        // modem.js 会读取这些键：无数据源时显式给空串，
+        // 避免前端走 undefined 分支显示异常；绝不伪造设备标识。
+        for key in ["model", "modem_model", "imei", "iccid", "imsi", "carrier", "serial", "firmware"] {
+            obj.entry(key.to_string()).or_insert_with(|| json!(""));
+        }
+        Ok(value)
     }
 
     // ---------------- 网络接口 ----------------
@@ -94,10 +137,15 @@ impl NetworkService {
             Err(_) => (0, 0),
         };
         let cfg = self.traffic_config().await?;
+        // 旧字段别名：前端读取 total（小写）；Total 为 v2.x 原始键名，两者同值。
+        // today / month 无历史累计表，返回 0 而非缺字段，避免前端显示 undefined。
         Ok(json!({
             "Total": rx + tx,
+            "total": rx + tx,
             "rx": rx,
             "tx": tx,
+            "today": 0,
+            "month": 0,
             "switch": cfg.get("switch").cloned().unwrap_or(json!(0)),
             "much": cfg.get("much").cloned().unwrap_or(json!(0)),
         }))
@@ -136,8 +184,45 @@ impl NetworkService {
             .config_get("charge.config")
             .await?
             .unwrap_or(json!({"enabled": false, "startThreshold": 20, "stopThreshold": 80}));
+
+        // 电池实时状态：仅当内核 power_supply 暴露对应节点时才写入，
+        // 缺失时保持字段为空字符串，前端据此显示「—」而不是 undefined。
+        let mut level: Option<u32> = None;
         if let Ok(v) = self.sysfs.read_u32("class/power_supply/battery/capacity").await {
+            level = Some(v);
             cfg["battery_level"] = json!(v);
+            // 旧字段别名：前端仪表盘读 level / capacity，内部用 battery_level。
+            cfg["level"] = json!(v);
+            cfg["capacity"] = json!(v);
+        }
+        if let Ok(v) = self.sysfs.read_u32("class/power_supply/battery/voltage_now").await {
+            // 内核多为微伏，换算成伏并保留两位，避免前端显示巨大数值。
+            cfg["voltage"] = json!((v as f64 / 1_000_000.0 * 100.0).round() / 100.0);
+        }
+        if let Ok(v) = self.sysfs.read_u32("class/power_supply/battery/current_now").await {
+            // 内核多为微安；负值表示放电，保留符号并按 mA 输出。
+            cfg["current"] = json!((v as f64 / 1000.0 * 10.0).round() / 10.0);
+        }
+        if let Ok(v) = self.sysfs.read_u32("class/power_supply/battery/temp").await {
+            // 内核以 0.1℃ 为单位。
+            cfg["temperature"] = json!((v as f64 / 10.0 * 10.0).round() / 10.0);
+        }
+        if let Ok(v) = self.sysfs.read("class/power_supply/battery/status").await {
+            let st = v.trim().to_string();
+            cfg["status"] = json!(st);
+            // charging 供前端兼容判断。
+            cfg["charging"] = json!(st.eq_ignore_ascii_case("Charging"));
+        }
+        if let Ok(v) = self.sysfs.read("class/power_supply/battery/health").await {
+            cfg["health"] = json!(v.trim());
+        }
+        if level.is_none() {
+            // 无电池节点（本机为模组形态）：显式给出空值，避免前端出现 undefined。
+            for key in ["level", "capacity", "voltage", "current", "temperature", "status", "health"] {
+                if !cfg.get(key).map(|v| !v.is_null()).unwrap_or(false) {
+                    cfg[key] = json!("");
+                }
+            }
         }
         Ok(cfg)
     }
@@ -177,11 +262,51 @@ impl NetworkService {
     // ---------------- 定时重启 ----------------
 
     pub async fn reboot_config(&self) -> AppResult<Value> {
-        Ok(self
+        let stored = self
             .db
             .config_get("reboot.schedule")
             .await?
-            .unwrap_or(json!({"days": [], "hour": 0, "minute": 0, "enabled": false})))
+            .unwrap_or(json!({"days": [], "hour": 0, "minute": 0, "enabled": false}));
+        Ok(Self::reboot_normalize(&stored))
+    }
+
+    /// 归一化定时重启配置：
+    /// 兼容旧字段 day（单值，'*' 或 0-6）与 days（数组），
+    /// 并保证四个键（days/enabled/hour/minute）齐全，避免前端拿到残缺对象。
+    fn reboot_normalize(cfg: &Value) -> Value {
+        let mut days: Vec<u64> = cfg
+            .get("days")
+            .and_then(|v| v.as_array())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|x| x.as_u64())
+                    .filter(|d| *d <= 6)
+                    .collect()
+            })
+            .unwrap_or_default();
+        if days.is_empty() {
+            match cfg.get("day").and_then(|v| v.as_str()) {
+                Some("*") => days = (0..=6).collect(),
+                Some(d) => {
+                    if let Ok(n) = d.parse::<u64>() {
+                        if n <= 6 {
+                            days.push(n);
+                        }
+                    }
+                }
+                None => {}
+            }
+        }
+        days.sort_unstable();
+        days.dedup();
+        let hour = cfg.get("hour").and_then(|v| v.as_u64()).unwrap_or(0).min(23);
+        let minute = cfg.get("minute").and_then(|v| v.as_u64()).unwrap_or(0).min(59);
+        let enabled = cfg
+            .get("enabled")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(!days.is_empty())
+            && !days.is_empty();
+        json!({"days": days, "enabled": enabled, "hour": hour, "minute": minute})
     }
 
     pub async fn reboot_set(&self, payload: &Value) -> AppResult<Value> {
@@ -190,13 +315,75 @@ impl NetworkService {
         if hour > 23 || minute > 59 {
             return Err(bad_request("定时时间非法"));
         }
-        self.db.config_set("reboot.schedule", payload).await?;
-        Ok(json!({"status": "ok"}))
+        // 关键修复：原实现把 payload 整份写入，cron 只传 day/hour/minute，
+        // 于是 days 与 enabled 被冲掉，页面永远显示 days=[]、enabled=false。
+        let cfg = Self::reboot_normalize(payload);
+        if cfg.get("enabled").and_then(|v| v.as_bool()) != Some(true) {
+            return Err(bad_request("定时重启缺少有效日期"));
+        }
+        self.db.config_set("reboot.schedule", &cfg).await?;
+        self.apply_reboot_cron(&cfg)?;
+        Ok(json!({"status": "ok", "config": cfg}))
     }
 
     pub async fn reboot_clear(&self) -> AppResult<Value> {
         self.db.config_delete("reboot.schedule").await?;
+        let cleared = json!({"days": [], "enabled": false, "hour": 0, "minute": 0});
+        self.apply_reboot_cron(&cleared)?;
         Ok(json!({"status": "ok", "cleared": true}))
+    }
+
+    /// 把定时重启真正落到 crontab（原实现只存库，设备从不重启）。
+    /// 只增删带标记的两行，绝不触碰其它行（例如看门狗兜底任务）。
+    fn apply_reboot_cron(&self, cfg: &Value) -> AppResult<()> {
+        const CRON_FILE: &str = "/var/spool/cron/crontabs/root";
+        const MARKER: &str = "# udx710-reboot-schedule";
+
+        let existing = std::fs::read_to_string(CRON_FILE).unwrap_or_default();
+        let mut kept: Vec<String> = Vec::new();
+        let mut skip_next = false;
+        for line in existing.lines() {
+            let t = line.trim();
+            if t == MARKER {
+                skip_next = true; // 标记行后紧跟的 cron 行一并移除
+                continue;
+            }
+            if skip_next {
+                skip_next = false;
+                continue;
+            }
+            if t.is_empty() {
+                continue;
+            }
+            kept.push(line.to_string());
+        }
+
+        let enabled = cfg.get("enabled").and_then(|v| v.as_bool()).unwrap_or(false);
+        if enabled {
+            let hour = cfg.get("hour").and_then(|v| v.as_u64()).unwrap_or(0);
+            let minute = cfg.get("minute").and_then(|v| v.as_u64()).unwrap_or(0);
+            let days: Vec<u64> = cfg
+                .get("days")
+                .and_then(|v| v.as_array())
+                .map(|a| a.iter().filter_map(|x| x.as_u64()).collect())
+                .unwrap_or_default();
+            if days.is_empty() {
+                return Err(bad_request("定时重启缺少有效日期"));
+            }
+            let dow = if days.len() >= 7 {
+                "*".to_string()
+            } else {
+                days.iter().map(|d| d.to_string()).collect::<Vec<_>>().join(",")
+            };
+            kept.push(MARKER.to_string());
+            kept.push(format!("{} {} * * {} /sbin/reboot", minute, hour, dow));
+        }
+
+        let mut out = kept.join("\n");
+        out.push('\n');
+        std::fs::write(CRON_FILE, out)
+            .map_err(|e| internal(format!("写入 crontab 失败: {e}")))?;
+        Ok(())
     }
 
     // ---------------- APN ----------------

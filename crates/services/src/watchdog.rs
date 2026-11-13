@@ -83,6 +83,12 @@ impl WatchdogState {
         now.saturating_sub(self.last_beat_ms.load(Ordering::Relaxed))
     }
 
+    /// 最近一次喂狗的时间戳。单测以它为基准，避免「先取时间再构造状态」
+    /// 造成的几毫秒漂移让阈值断言偶发失败。
+    pub fn last_beat_ms(&self) -> u64 {
+        self.last_beat_ms.load(Ordering::Relaxed)
+    }
+
     /// 纯逻辑判定，便于单测注入时间而不用真等 30 秒。
     pub fn is_stalled_at(&self, now: u64) -> bool {
         self.enabled && self.age_ms_at(now) > self.stall_ms
@@ -237,7 +243,9 @@ mod tests {
     #[test]
     fn stall_is_detected_only_after_threshold_and_beat_resets_it() {
         let s = WatchdogState::new(&cfg("exit"));
-        let t0 = now_ms();
+        // 以状态内部记录的首次喂狗时间为基准：created_at 必然 <= 任何外部 now_ms()，
+        // 用外部时间会让 t0+9_999 因几毫秒漂移越过阈值，导致断言偶发失败。
+        let t0 = s.last_beat_ms();
         assert!(!s.is_stalled_at(t0 + 9_999));
         assert!(s.is_stalled_at(t0 + 10_001));
         s.beat_at(t0 + 10_001);
