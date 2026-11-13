@@ -81,6 +81,8 @@ export function render(container, context) {
     sinr: kvRow('信干噪比 (SINR)'),
     qci: kvRow('QCI / 5QI 等级'),
     speed: kvRow('SIM 卡签约速率'),
+    wan_ipv4: kvRow('蜂窝 IPv4 地址'),
+    wan_ipv6: kvRow('蜂窝 IPv6 地址'),
     power: kvRow('供电运行模式'),
     uptime: kvRow('连续运行周期')
   };
@@ -214,8 +216,11 @@ export function render(container, context) {
     channelRows.rsrp.set(rsrp != null ? `${rsrp} dBm${rsrpSuffix}` : '—');
     channelRows.rsrq.set(rsrq != null ? `${rsrq} dB (优质)` : '—');
     channelRows.sinr.set(sinrStr);
-    channelRows.qci.set(fieldOf(cur, 'qci', '5QI 9 (默认互联网承载 / Non-GBR)'));
+    channelRows.qci.set(fieldOf(cur, 'qci', '5QI 9 (Non-GBR)'));
     channelRows.speed.set(fieldOf(cur, 'subscribed_speed', '下行 500 Mbps / 上行 100 Mbps'));
+    channelRows.wan_ipv4.set(fieldOf(cur, 'wan_ipv4', fieldOf(cur, 'ipv4', '—')));
+    const v6Addr = fieldOf(cur, 'wan_ipv6', fieldOf(cur, 'ipv6', '—'));
+    channelRows.wan_ipv6.set(v6Addr && v6Addr !== '—' ? v6Addr : '—');
   }
 
   function applyTotal(total) {

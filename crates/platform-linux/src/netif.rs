@@ -20,6 +20,7 @@ pub async fn list_interfaces() -> AppResult<Vec<NetifInfo>> {
     // IPv4 需要内核地址表，/proc/net/dev 只有计数；一次 getifaddrs 取全量，
     // 避免为每个接口派生子进程。
     let ipv4 = ipv4_map();
+    let ipv6 = ipv6_map();
     let mut result = Vec::new();
     for line in text.lines().skip(2) {
         let mut parts = line.splitn(2, ':');
@@ -32,16 +33,21 @@ pub async fn list_interfaces() -> AppResult<Vec<NetifInfo>> {
         if name.is_empty() || nums.len() < 10 {
             continue;
         }
+        let mut extra = BTreeMap::new();
+        if let Some(v6) = ipv6.get(&name) {
+            extra.insert("ipv6".to_string(), serde_json::json!(v6));
+        }
         result.push(NetifInfo {
             mac: read_sysfs(&name, "address").await,
             up: read_flags_up(&name).await,
             mtu: read_sysfs(&name, "mtu").await.parse::<u64>().unwrap_or(0),
             ipv4: ipv4.get(&name).cloned().unwrap_or_default(),
+            ipv6: ipv6.get(&name).cloned().unwrap_or_default(),
             name,
             rx_bytes: nums[0],
             tx_bytes: nums[8],
             monitored: false,
-            extra: BTreeMap::new(),
+            extra,
         });
     }
     Ok(result)
@@ -99,6 +105,30 @@ fn ipv4_map() -> std::collections::HashMap<String, String> {
             cur = ifa.ifa_next;
         }
         libc::freeifaddrs(head);
+    }
+    map
+}
+
+/// 读取 `/proc/net/if_inet6` 取全部全局 IPv6 地址，返回 接口名 -> 冒号十六进制 IPv6。
+pub fn ipv6_map() -> std::collections::HashMap<String, String> {
+    let mut map = std::collections::HashMap::new();
+    let Ok(text) = std::fs::read_to_string("/proc/net/if_inet6") else {
+        return map;
+    };
+    for line in text.lines() {
+        let cols: Vec<&str> = line.split_whitespace().collect();
+        if cols.len() < 6 {
+            continue;
+        }
+        let hex = cols[0];
+        let scope = cols[3];
+        let ifname = cols[5];
+        if hex.len() != 32 || scope != "00" || hex.starts_with("fe80") || ifname == "lo" {
+            continue;
+        }
+        let groups: Vec<&str> = (0..8).map(|i| &hex[i * 4..i * 4 + 4]).collect();
+        let addr = groups.join(":");
+        map.entry(ifname.to_string()).or_insert(addr);
     }
     map
 }

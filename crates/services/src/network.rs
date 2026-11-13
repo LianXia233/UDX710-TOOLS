@@ -16,10 +16,35 @@ pub struct NetworkService {
 
 impl NetworkService {
     pub fn new(db: Db) -> Self {
+        // 保证设备底层默认启用 IPv6 双栈
+        tokio::spawn(async {
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            Self::ensure_default_ipv6();
+        });
+
         Self {
             db,
             runner: CommandRunner::default(),
             sysfs: Sysfs::default(),
+        }
+    }
+
+    fn ensure_default_ipv6() {
+        let output = std::process::Command::new("yr_cmd_app")
+            .args(["apn", "get"])
+            .output();
+        if let Ok(out) = output {
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            if let Ok(parsed) = serde_json::from_str::<Value>(&stdout) {
+                let current_type = parsed.get("context").and_then(|c| c.get("ip_type")).and_then(|v| v.as_u64());
+                if current_type == Some(0) {
+                    let apn_name = parsed.get("context").and_then(|c| c.get("apn_name")).and_then(|v| v.as_str()).unwrap_or("cmnet");
+                    let _ = std::process::Command::new("/bin/sh")
+                        .arg("-c")
+                        .arg(format!("yr_cmd_app apn set --ip_type 2 --apn_name '{apn_name}' --apn_usrname 'null' --apn_password 'null' --apn_authtype 0"))
+                        .status();
+                }
+            }
         }
     }
 
@@ -64,6 +89,18 @@ impl NetworkService {
         obj.insert("machine".to_string(), json!(std::env::consts::ARCH));
         obj.insert("sysname".to_string(), json!("Linux"));
         obj.insert("release".to_string(), json!(info.kernel));
+        // 蜂窝口（sipa_eth0）WAN IP 地址获取（IPv4 与 IPv6 双栈）
+        let v6_map = udx_platform_linux::ipv6_map();
+        let wan_ipv6 = v6_map.get("sipa_eth0").cloned().unwrap_or_else(|| {
+            v6_map.values().next().cloned().unwrap_or_default()
+        });
+        let wan_ipv4 = match interface_stats("sipa_eth0").await {
+            Ok(i) => i.ipv4,
+            Err(_) => String::new(),
+        };
+        obj.insert("wan_ipv4".to_string(), json!(wan_ipv4));
+        obj.insert("wan_ipv6".to_string(), json!(wan_ipv6));
+        obj.insert("ipv6".to_string(), json!(wan_ipv6));
         // modem.js 会读取这些键：无数据源时显式给空串，
         // 避免前端走 undefined 分支显示异常；绝不伪造设备标识。
         for key in ["model", "modem_model", "imei", "iccid", "imsi", "carrier", "serial", "firmware"] {
@@ -520,11 +557,18 @@ impl NetworkService {
     // ---------------- APN ----------------
 
     pub async fn apn_config(&self) -> AppResult<Value> {
-        Ok(self
-            .db
-            .config_get("apn.config")
-            .await?
-            .unwrap_or(json!({"apn": "", "username": "", "password": "", "auth_type": "auto", "ip_type": "ipv4v6"})))
+        let stored = self.db.config_get("apn.config").await?;
+        if let Some(cfg) = stored {
+            return Ok(cfg);
+        }
+        Ok(json!({
+            "apn": "cmnet",
+            "username": "",
+            "password": "",
+            "auth_type": "none",
+            "ip_type": "ipv4v6",
+            "protocol": "dual"
+        }))
     }
 
     pub async fn apn_set(&self, payload: &Value) -> AppResult<Value> {
@@ -532,8 +576,65 @@ impl NetworkService {
         if apn.len() > 128 || apn.chars().any(|c| c.is_control()) {
             return Err(bad_request("APN 非法"));
         }
+        let user = payload.get("username").and_then(|v| v.as_str()).unwrap_or("");
+        let pass = payload.get("password").and_then(|v| v.as_str()).unwrap_or("");
+        let auth_str = payload.get("auth_type").and_then(|v| v.as_str()).unwrap_or("none");
+        let auth_int = match auth_str {
+            "pap" => 1,
+            "chap" => 2,
+            "auto" | "pap_or_chap" => 3,
+            _ => 0,
+        };
+        let ip_type_val = match payload.get("ip_type").or_else(|| payload.get("protocol")) {
+            Some(Value::String(s)) => match s.to_ascii_lowercase().as_str() {
+                "ipv6" => 1,
+                "ipv4" => 0,
+                _ => 2,
+            },
+            Some(Value::Number(n)) => n.as_u64().unwrap_or(2),
+            _ => 2,
+        };
+
         self.db.config_set("apn.config", payload).await?;
-        Ok(json!({"status": "ok"}))
+        Self::apply_device_apn(apn, user, pass, auth_int, ip_type_val);
+        Ok(json!({"status": "ok", "applied": true, "ip_type": ip_type_val}))
+    }
+
+    pub async fn apn_apply(&self, payload: &Value) -> AppResult<Value> {
+        let template_id = payload
+            .get("template_id")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .or_else(|| payload.get("template_id").and_then(|v| v.as_u64()).map(|n| n.to_string()));
+        let mut target_apn = json!({
+            "apn": "cmnet",
+            "username": "",
+            "password": "",
+            "auth_type": "none",
+            "ip_type": "ipv4v6",
+            "protocol": "dual"
+        });
+        if let Some(id) = template_id {
+            if let Ok(Some(tpl)) = self.db.entity_get(Entity::ApnTemplate, &id).await {
+                target_apn = json!(tpl);
+            }
+        } else if let Ok(Some(cfg)) = self.db.config_get("apn.config").await {
+            target_apn = cfg;
+        }
+        self.apn_set(&target_apn).await
+    }
+
+    fn apply_device_apn(apn: &str, user: &str, pass: &str, auth_type: u64, ip_type: u64) {
+        let safe_apn = if apn.is_empty() { "cmnet" } else { apn };
+        let safe_user = if user.is_empty() { "null" } else { user };
+        let safe_pass = if pass.is_empty() { "null" } else { pass };
+        let cmd = format!(
+            "yr_cmd_app apn set --ip_type {ip_type} --apn_name '{safe_apn}' --apn_usrname '{safe_user}' --apn_password '{safe_pass}' --apn_authtype {auth_type}"
+        );
+        let _ = std::process::Command::new("/bin/sh")
+            .arg("-c")
+            .arg(&cmd)
+            .status();
     }
 
     pub async fn apn_templates_list(&self) -> AppResult<Value> {
@@ -585,14 +686,6 @@ impl NetworkService {
         Ok(json!({"status": "ok", "deleted": n}))
     }
 
-    pub async fn apn_apply(&self) -> AppResult<Value> {
-        Ok(json!({
-            "status": "ok",
-            "outcome": "unknown",
-            "device_verified": false,
-            "note": "APN 应用需设备侧 oFono 上下文确认"
-        }))
-    }
 
     pub async fn apn_clear(&self) -> AppResult<Value> {
         self.db.config_delete("apn.config").await?;

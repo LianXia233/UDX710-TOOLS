@@ -196,6 +196,9 @@ pub struct NetifInfo {
     /// IPv4 地址，来自 `getifaddrs`；无地址时为空串。
     #[serde(default)]
     pub ipv4: String,
+    /// 全局 IPv6 地址，来自 `/proc/net/if_inet6`；无地址时为空串。
+    #[serde(default)]
+    pub ipv6: String,
     /// 由 `/sys/class/net/<name>/flags` 的 IFF_UP 位判定，比 operstate 更准
     ///（点对点接口常为 unknown 但实际可用）。
     #[serde(default)]

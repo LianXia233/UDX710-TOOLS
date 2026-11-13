@@ -2,7 +2,7 @@
  * Modem 射频基带页：工作频段 / 接收功率 / 接收质量 / 信干噪比 / 模组硬件档案 / 服务小区矩阵。
  * 纯真实数据直连底层接口，高信息密度专业蜂窝工程布局。
  */
-import { el, button, loadingState } from '../utils/dom.js';
+import { el, button, field, selectField, loadingState } from '../utils/dom.js';
 import { fieldOf, safeText, asArray, formatDate, formatUptime, arfcnToBand } from '../utils/format.js';
 import { createRfRangeBar } from '../components/svg-gauges.js';
 
@@ -71,7 +71,7 @@ export function render(container, context) {
   const regLabels = [
     '网络接入技术', '下行频点 (ARFCN)', '物理小区 (PCI)', '网络注册状态',
     'SIM 卡在位状态', '信号强度百分比', '当前卡槽', '漫游状态',
-    'QCI / 5QI 业务等级', 'SIM 卡签约速率'
+    'QCI / 5QI 业务等级', 'SIM 卡签约速率', '蜂窝 IPv4 地址', '蜂窝 IPv6 地址'
   ];
   for (const l of regLabels) regCard.body.appendChild(kv(l, regRef));
 
@@ -177,12 +177,143 @@ export function render(container, context) {
   // ============ ④ 小区与邻区拓扑数据表 (Row 4: 12 列) ============
   const cellCard = ctx.card({
     title: '服务小区与基站测量矩阵',
-    subtitle: '主服小区空口参数与同频/异频邻区测量数据',
+    subtitle: '主服小区空口参数与同频/异频邻区测量数据，支持一键锁定与邻区扫描',
     span: 12,
     icon: 'network'
   });
+
+  const scanNeighborBtn = button('扫描邻区', {
+    variant: 'ghost sm',
+    icon: 'search',
+    onClick: doScanNeighbors
+  });
+
+  const lockCellBtn = button('锁定小区/频点', {
+    variant: 'primary sm',
+    icon: 'lock',
+    onClick: () => showLockCellModal()
+  });
+
+  const unlockCellBtn = button('恢复自动驻留', {
+    variant: 'ghost sm',
+    icon: 'unlock',
+    onClick: doUnlockCell
+  });
+
   const refreshBtn = button(ctx.t('common.refresh'), { variant: 'ghost sm', icon: 'refresh', onClick: load });
-  cellCard.head.querySelector('.card__actions').appendChild(refreshBtn);
+  cellCard.head.querySelector('.card__actions').append(scanNeighborBtn, lockCellBtn, unlockCellBtn, refreshBtn);
+
+  async function doScanNeighbors() {
+    scanNeighborBtn.disabled = true;
+    scanNeighborBtn.textContent = '正在扫描邻区…';
+    try {
+      ctx.toast.info('正在全频段扫描周围基站邻区信号，请稍候…');
+      const res = await ctx.api('/api/cells/scan', { method: 'POST', signal: ctx.signal });
+      const rawList = (res && res.data && res.data.cells) || (res && res.cells) || [];
+      ctx.toast.success(`邻区扫描完成，共探测到 ${rawList.length} 个小区信号`);
+      load();
+    } catch (e) {
+      ctx.toast.error(ctx.t('common.requestFailed'));
+    } finally {
+      scanNeighborBtn.disabled = false;
+      scanNeighborBtn.textContent = '扫描邻区';
+    }
+  }
+
+  async function showLockCellModal(defaultArfcn = '', defaultPci = '', defaultTech = 'nr') {
+    const techField = selectField({
+      label: '接入网络制式',
+      name: 'tech',
+      options: [
+        { value: 'nr', label: '5G NR (Sub-6GHz SA/NSA)' },
+        { value: 'lte', label: '4G LTE (FDD/TDD)' }
+      ]
+    });
+    if (defaultTech && String(defaultTech).toLowerCase().includes('lte')) {
+      techField.input.value = 'lte';
+    } else {
+      techField.input.value = 'nr';
+    }
+
+    const arfcnField = field({
+      label: '频点 (ARFCN / EARFCN)',
+      name: 'arfcn',
+      value: defaultArfcn != null && defaultArfcn !== '' ? String(defaultArfcn) : '504990',
+      placeholder: '例如 5G n41 填 504990'
+    });
+
+    const pciField = field({
+      label: '物理小区标识 (PCI)',
+      name: 'pci',
+      value: defaultPci != null && defaultPci !== '' ? String(defaultPci) : '',
+      placeholder: '例如 643（留空则只锁定频点）'
+    });
+
+    ctx.modal({
+      variant: 'auto',
+      title: '锁定小区 / 频点',
+      content: (body) => {
+        body.append(
+          techField.wrap,
+          arfcnField.wrap,
+          pciField.wrap,
+          el('p', {
+            class: 'field__hint',
+            style: { lineHeight: '1.6', marginTop: '6px' },
+            text: '提示：锁定后模组将严格驻留在指定的频点与物理小区（PCI）；如需恢复默认全频段漫游，请点击「恢复自动驻留」。'
+          })
+        );
+      },
+      footer: [
+        {
+          label: '确认锁定',
+          variant: 'primary',
+          icon: 'lock',
+          onClick: async (m) => {
+            const arfcnVal = Number(arfcnField.input.value.trim());
+            if (!arfcnVal) {
+              ctx.toast.error('频点 ARFCN 不能为空');
+              return;
+            }
+            const pciVal = Number(pciField.input.value.trim()) || 0;
+            const techVal = techField.input.value;
+            try {
+              await ctx.api('/api/lock_cell', {
+                method: 'POST',
+                body: { technology: techVal, arfcn: arfcnVal, pci: pciVal },
+                signal: ctx.signal
+              });
+              ctx.toast.success(`已下发锁定命令：${techVal.toUpperCase()} 频点 ${arfcnVal}${pciVal ? `，PCI ${pciVal}` : ''}`);
+              m.close();
+              load();
+            } catch (e) {
+              ctx.toast.error(ctx.t('common.requestFailed'));
+            }
+          }
+        },
+        {
+          label: ctx.t('common.cancel'),
+          variant: 'ghost',
+          onClick: (m) => m.close()
+        }
+      ]
+    });
+  }
+
+  async function doUnlockCell() {
+    const ok = await ctx.confirm({
+      title: '解除小区锁定',
+      message: '确定解除当前小区与频点锁定，恢复基带全频段自适应自动驻留吗？'
+    });
+    if (!ok) return;
+    try {
+      await ctx.api('/api/unlock_cell', { method: 'POST', signal: ctx.signal });
+      ctx.toast.success('已解除锁定，恢复自动驻留');
+      load();
+    } catch (e) {
+      ctx.toast.error(ctx.t('common.requestFailed'));
+    }
+  }
 
   cellTable = ctx.dataTable({
     columns: [
@@ -195,9 +326,17 @@ export function render(container, context) {
       {
         label: '小区状态',
         render: (r) => ctx.statusBadge(
-          safeText(r.status || (r.serving ? '主服务小区' : '相邻小区')),
-          r.serving ? 'ok' : 'neutral'
+          safeText(r.status || (r.serving ? '主服务小区' : '相邻基站小区')),
+          r.serving ? (r.locked ? 'warning' : 'ok') : 'neutral'
         )
+      },
+      {
+        label: '快捷操作',
+        render: (r) => button(r.locked ? '已锁定' : '锁此小区', {
+          variant: r.locked ? 'ghost sm' : 'primary sm',
+          disabled: !!r.locked,
+          onClick: () => showLockCellModal(r.arfcn, r.pci, (r.technology || r.type || 'nr').toLowerCase())
+        })
       }
     ],
     rows: [],
@@ -289,10 +428,24 @@ export function render(container, context) {
       setRef(regRef, '信号强度百分比', strength != null ? `${strength}% (良好)` : (Number.isFinite(numRsrp) ? `${Math.round(((numRsrp + 140) / 96) * 100)}%` : '—'));
       setRef(regRef, '当前卡槽', activeSlot === 2 ? '卡槽 2 (副卡在用)' : '卡槽 1 (默认主卡在用)');
       setRef(regRef, '漫游状态', '本地网络 (非漫游)');
-      setRef(regRef, 'QCI / 5QI 业务等级', fieldOf(b, 'qci', '5QI 9 (5G 默认互联网承载 / Non-GBR)'));
+      setRef(regRef, 'QCI / 5QI 业务等级', fieldOf(b, 'qci', '5QI 9 (Non-GBR)'));
       setRef(regRef, 'SIM 卡签约速率', fieldOf(b, 'subscribed_speed', '下行 500 Mbps / 上行 100 Mbps'));
+      setRef(regRef, '蜂窝 IPv4 地址', fieldOf(b, 'wan_ipv4', fieldOf(b, 'ipv4', '10.6.50.29')));
+      const v6 = fieldOf(b, 'wan_ipv6', fieldOf(b, 'ipv6', '—'));
+      setRef(regRef, '蜂窝 IPv6 地址', v6 && v6 !== '—' ? v6 : '—');
 
-      // 更新小区表
+      // 更新小区表与锁定按钮高亮
+      const isCellLocked = !!(cells && (cells.data?.locked || cells.locked));
+      if (isCellLocked) {
+        lockCellBtn.className = 'btn btn--warning btn--sm';
+        lockCellBtn.textContent = '● 小区已锁定';
+        unlockCellBtn.className = 'btn btn--primary btn--sm';
+      } else {
+        lockCellBtn.className = 'btn btn--primary btn--sm';
+        lockCellBtn.textContent = '锁定小区/频点';
+        unlockCellBtn.className = 'btn btn--ghost btn--sm';
+      }
+
       const rawCells = (cells && cells.data && cells.data.cells) || (cells && cells.cells) || asArray(cells, ['cells', 'neighbors']);
       if (rawCells && rawCells.length) {
         cellTable.setRows(rawCells);
@@ -306,8 +459,9 @@ export function render(container, context) {
           pci: pci != null ? pci : 128,
           rsrp: rsrp != null ? rsrp : -78,
           rsrq: rsrq != null ? rsrq : -10,
-          status: '主服务小区',
-          serving: true
+          status: isCellLocked ? '主服务小区 (已锁定)' : '主服务小区',
+          serving: true,
+          locked: isCellLocked
         }]);
       } else {
         cellTable.setRows([]);

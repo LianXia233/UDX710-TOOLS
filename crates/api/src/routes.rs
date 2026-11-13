@@ -52,6 +52,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/lock_bands", post(h::lock_bands))
         .route("/api/unlock_bands", post(h::unlock_bands))
         .route("/api/cells", get(h::cells))
+        .route("/api/cells/scan", post(h::cells_scan))
         .route("/api/lock_cell", post(h::lock_cell))
         .route("/api/unlock_cell", post(h::unlock_cell))
         .route("/api/data", get(h::data_status).post(h::data_set))

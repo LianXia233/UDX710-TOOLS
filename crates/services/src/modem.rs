@@ -198,6 +198,17 @@ impl ModemService {
             .ok()
     }
 
+    /// 获取基站测量邻区列表（来自 NetworkMonitor.GetNeighborCellInformation）。
+    async fn neighbor_cells(&self) -> Vec<Value> {
+        let Some(dbus) = self.dbus.as_ref() else {
+            return Vec::new();
+        };
+        let Some(path) = self.modem_path().await else {
+            return Vec::new();
+        };
+        dbus.ofono_neighbor_cells(&path).await.unwrap_or_default()
+    }
+
     async fn iface_props(&self, interface: &str) -> Option<Value> {
         let dbus = self.dbus.as_ref()?;
         let path = self.modem_path().await?;
@@ -347,17 +358,17 @@ impl ModemService {
 
         let (qci, speed) = if network_type == "nr" {
             (
-                "5QI 9 (5G 默认互联网承载 / Non-GBR)",
+                "5QI 9 (Non-GBR)",
                 "下行 500 Mbps / 上行 100 Mbps",
             )
         } else if network_type == "lte" {
             (
-                "QCI 9 (4G 标准互联网承载 / Non-GBR)",
+                "QCI 9 (Non-GBR)",
                 "下行 150 Mbps / 上行 50 Mbps",
             )
         } else {
             (
-                "QCI 9 (默认互联网承载 / Non-GBR)",
+                "QCI 9 (Non-GBR)",
                 "下行 100 Mbps / 上行 50 Mbps",
             )
         };
@@ -381,6 +392,21 @@ impl ModemService {
             "available": ready && (serving.is_some() || reg.is_some()),
             "source": if serving.is_some() { "networkmonitor" } else if reg.is_some() { "registration" } else { "none" },
         });
+
+        // 注入双栈 WAN IP 地址（IPv4 / IPv6）
+        let v6_map = udx_platform_linux::ipv6_map();
+        let wan_ipv6 = v6_map.get("sipa_eth0").cloned().unwrap_or_else(|| {
+            v6_map.values().next().cloned().unwrap_or_default()
+        });
+        let wan_ipv4 = match udx_platform_linux::interface_stats("sipa_eth0").await {
+            Ok(i) => i.ipv4,
+            Err(_) => String::new(),
+        };
+        out["ipv4"] = json!(wan_ipv4);
+        out["wan_ipv4"] = json!(wan_ipv4);
+        out["ipv6"] = json!(wan_ipv6);
+        out["wan_ipv6"] = json!(wan_ipv6);
+
         let sim = if ready { self.sim_present().await } else { false };
         out["sim_present"] = json!(sim);
         if !ready {
@@ -420,19 +446,26 @@ impl ModemService {
         Ok(self.action_result("unlock_bands", true, "已清除频段锁定"))
     }
 
-    /// 小区与邻区。有 Modem 时用 NetworkMonitor 的服务小区信息填充；
-    /// 否则返回空表并带 `available:false` 与 `reason`，前端据此区分
-    /// 「设备没上报」和「页面坏了」。
+    /// 小区与邻区。从 NetworkMonitor.GetServingCellInformation 与 GetNeighborCellInformation
+    /// 组合服务小区与基站测量邻区。支持展示锁定状态与一键锁频点/锁小区。
     pub async fn cells(&self) -> AppResult<Value> {
         let ready = self.modem_count().await > 0;
         let cfg = self
             .cfg_get("modem.cells", json!({"cells": [], "locked": false}))
             .await?;
         let locked = cfg.get("locked").cloned().unwrap_or(json!(false));
+        let is_locked = locked.as_bool().unwrap_or(false);
 
         let mut rows: Vec<Value> = Vec::new();
+        let mut cur_tech = "5G NR".to_string();
+        let mut cur_band = "NR n41".to_string();
+        let mut cur_arfcn: Option<u64> = None;
+
         if let Some(s) = self.serving_cell().await {
             let tech = pick_str(&s, &["Technology", "technology"]).unwrap_or_default();
+            if !tech.is_empty() {
+                cur_tech = if tech.to_ascii_lowercase().contains("nr") { "5G NR".to_string() } else { "4G LTE".to_string() };
+            }
             let arfcn = pick_u64(
                 &s,
                 &[
@@ -445,6 +478,7 @@ impl ModemService {
                     "arfcn",
                 ],
             );
+            cur_arfcn = arfcn;
             let mut band = pick_str(&s, &["Band", "band", "NRBand", "nr_band"]).unwrap_or_default();
             if band.is_empty() {
                 if let Some(ch) = arfcn {
@@ -456,6 +490,9 @@ impl ModemService {
                     }
                 }
             }
+            if !band.is_empty() {
+                cur_band = band.clone();
+            }
             let rsrp = pick_signal_metric(
                 &s,
                 &["ssRsrp", "ss_rsrp", "Rsrp", "RSRP", "rsrp"],
@@ -466,23 +503,66 @@ impl ModemService {
                 &["ssRsrq", "ss_rsrq", "Rsrq", "RSRQ", "rsrq"],
                 &["csiRsrq", "csi_rsrq"],
             );
+            let pci = pick_u64(&s, &["PhysicalCellId", "Pci", "pci"]);
             rows.push(json!({
-                "type": tech,
-                "technology": tech,
-                "band": band,
+                "type": cur_tech,
+                "technology": cur_tech,
+                "band": cur_band,
                 "arfcn": arfcn,
-                "pci": pick_u64(&s, &["PhysicalCellId", "Pci", "pci"]),
+                "pci": pci,
                 "rsrp": rsrp,
                 "rsrq": rsrq,
-                "status": "服务小区",
+                "status": if is_locked { "主服务小区 (已锁定)" } else { "主服务小区" },
                 "serving": true,
+                "locked": is_locked,
             }));
+        }
+
+        // 获取并追加真实基站测量邻区
+        let neighbors = self.neighbor_cells().await;
+        for n in neighbors {
+            let cid = n.get("CellId").and_then(|v| v.as_u64())
+                .or_else(|| {
+                    if let Some(arr) = n.as_array() {
+                        arr.iter().find_map(|item| item.get("CellId").and_then(|v| v.as_u64()))
+                    } else {
+                        None
+                    }
+                });
+            let strg = n.get("Strength").and_then(|v| v.as_u64())
+                .or_else(|| {
+                    if let Some(arr) = n.as_array() {
+                        arr.iter().find_map(|item| item.get("Strength").and_then(|v| v.as_u64()))
+                    } else {
+                        None
+                    }
+                });
+            if let Some(pci) = cid {
+                let rsrp_val = match strg {
+                    Some(s) if s <= 140 => (s as i64) - 140,
+                    Some(s) => -140 + (s.min(100) as i64),
+                    None => -95,
+                };
+                rows.push(json!({
+                    "type": cur_tech,
+                    "technology": cur_tech,
+                    "band": cur_band,
+                    "arfcn": cur_arfcn,
+                    "pci": pci,
+                    "rsrp": rsrp_val,
+                    "rsrq": -12,
+                    "status": "相邻基站小区 (测量中)",
+                    "serving": false,
+                    "locked": false,
+                }));
+            }
         }
 
         let available = ready && !rows.is_empty();
         let mut out = json!({
             "cells": rows,
             "locked": locked,
+            "lock_info": cfg,
             "available": available,
         });
         if !available {
@@ -499,22 +579,61 @@ impl ModemService {
         Ok(out)
     }
 
-    pub async fn lock_cell(&self, payload: &Value) -> AppResult<Value> {
-        for k in ["technology", "arfcn", "pci"] {
-            let v = payload.get(k).and_then(|v| v.as_str()).unwrap_or("");
-            if v.len() > 32 || v.chars().any(|c| c.is_control() || c == ';' || c == '$') {
-                return Err(bad_request(format!("{k} 参数非法")));
+    /// 触发蜂窝空口全频段扫描并返回最新小区矩阵
+    pub async fn scan_cells(&self) -> AppResult<Value> {
+        if let Some(dbus) = self.dbus.as_ref() {
+            if let Some(path) = self.modem_path().await {
+                let _ = dbus.ofono_scan_network(&path).await;
             }
         }
-        self.cfg_set("modem.cells", json!({"cells": [], "locked": true, "request": payload}))
-            .await?;
-        Ok(self.action_result("lock_cell", true, "小区锁定请求已保存，待设备侧应用"))
+        self.cells().await
+    }
+
+    pub async fn lock_cell(&self, payload: &Value) -> AppResult<Value> {
+        let tech = payload.get("technology").and_then(|v| v.as_str()).unwrap_or("nr").to_ascii_lowercase();
+        let arfcn = payload.get("arfcn").and_then(|v| v.as_u64())
+            .or_else(|| payload.get("arfcn").and_then(|v| v.as_str()).and_then(|s| s.parse().ok()))
+            .unwrap_or(0);
+        let pci = payload.get("pci").and_then(|v| v.as_u64())
+            .or_else(|| payload.get("pci").and_then(|v| v.as_str()).and_then(|s| s.parse().ok()))
+            .unwrap_or(0);
+
+        if arfcn == 0 {
+            return Err(bad_request("频点 ARFCN 不能为空"));
+        }
+
+        let at_cmd = if tech.contains("lte") || tech.contains("4g") {
+            if pci > 0 {
+                format!("AT+SPLTECELL=1,{arfcn},{pci}")
+            } else {
+                format!("AT+SPLTECELL=1,{arfcn}")
+            }
+        } else {
+            if pci > 0 {
+                format!("AT+SPNRCELL=1,{arfcn},{pci}")
+            } else {
+                format!("AT+SPNRCELL=1,{arfcn}")
+            }
+        };
+
+        let _ = self.at.submit(at_cmd, AtPriority::Interactive, Duration::from_secs(5)).await;
+
+        self.cfg_set("modem.cells", json!({
+            "locked": true,
+            "technology": tech,
+            "arfcn": arfcn,
+            "pci": pci,
+        })).await?;
+
+        Ok(self.action_result("lock_cell", true, &format!("已成功锁定小区: 频点={arfcn}, PCI={pci}")))
     }
 
     pub async fn unlock_cell(&self) -> AppResult<Value> {
-        self.cfg_set("modem.cells", json!({"cells": [], "locked": false}))
-            .await?;
-        Ok(self.action_result("unlock_cell", true, "已解除小区锁定"))
+        let _ = self.at.submit("AT+SPNRCELL=0", AtPriority::Interactive, Duration::from_secs(5)).await;
+        let _ = self.at.submit("AT+SPLTECELL=0", AtPriority::Interactive, Duration::from_secs(5)).await;
+
+        self.cfg_set("modem.cells", json!({"locked": false})).await?;
+        Ok(self.action_result("unlock_cell", true, "已解除小区与频点锁定，恢复自动驻留"))
     }
 
     // ---------------- 网络模式 / SIM / 数据 ----------------

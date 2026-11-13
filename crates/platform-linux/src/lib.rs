@@ -17,7 +17,7 @@ pub mod sysfs;
 
 pub use command::{validate_arg, CommandOutput, CommandRunner, FixedCommand, DEFAULT_MAX_OUTPUT};
 pub use dbus::{DbusClient, OFONO_SERVICE};
-pub use netif::{interface_stats, list_interfaces, system_info};
+pub use netif::{interface_stats, ipv6_map, list_interfaces, system_info};
 pub use path::{atomic_write, resolve_under, safe_component, MAX_COMPONENT_LEN};
 pub use shell::{
     redact_sensitive, InteractiveShell, ShellExecutor, ShellPolicy, ShellReader, ShellWriter,

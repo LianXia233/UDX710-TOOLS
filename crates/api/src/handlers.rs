@@ -275,6 +275,10 @@ pub async fn cells(State(s): State<AppState>) -> ApiResult<Json<Value>> {
     done(s.services.modem.cells()).await
 }
 
+pub async fn cells_scan(State(s): State<AppState>) -> ApiResult<Json<Value>> {
+    done(s.services.modem.scan_cells()).await
+}
+
 pub async fn lock_cell(State(s): State<AppState>, Json(b): Json<Value>) -> ApiResult<Json<Value>> {
     done(s.services.modem.lock_cell(&b)).await
 }
@@ -426,8 +430,9 @@ pub async fn apn_template_delete(State(s): State<AppState>, Path(id): Path<Strin
     done(s.services.network.apn_template_delete(&id)).await
 }
 
-pub async fn apn_apply(State(s): State<AppState>) -> ApiResult<Json<Value>> {
-    done(s.services.network.apn_apply()).await
+pub async fn apn_apply(State(s): State<AppState>, b: Option<Json<Value>>) -> ApiResult<Json<Value>> {
+    let body = b.map(|Json(v)| v).unwrap_or_else(|| serde_json::json!({}));
+    done(s.services.network.apn_apply(&body)).await
 }
 
 pub async fn apn_clear(State(s): State<AppState>) -> ApiResult<Json<Value>> {

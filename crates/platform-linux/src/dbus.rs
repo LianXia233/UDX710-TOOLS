@@ -234,6 +234,73 @@ impl DbusClient {
         Ok(zvariant_unwrap(&raw))
     }
 
+    /// 获取基站测量邻区列表（通过 `org.ofono.NetworkMonitor.GetNeighborCellInformation`）。
+    /// 响应签名为 `a(a{sv})`，每项包含 CellId、Strength 等空口邻区测量值。
+    pub async fn ofono_neighbor_cells(&self, modem_path: &str) -> AppResult<Vec<serde_json::Value>> {
+        let dest = zbus::names::BusName::try_from(OFONO_SERVICE)
+            .map_err(|e| AppError::ServiceUnavailable(format!("D-Bus 目标非法: {e}")))?;
+        let path = zbus::zvariant::ObjectPath::try_from(modem_path)
+            .map_err(|e| AppError::ServiceUnavailable(format!("modem 路径非法: {e}")))?;
+        let iface = InterfaceName::try_from("org.ofono.NetworkMonitor")
+            .map_err(|e| AppError::ServiceUnavailable(format!("接口名非法: {e}")))?;
+        let member = zbus::names::MemberName::try_from("GetNeighborCellInformation")
+            .map_err(|e| AppError::ServiceUnavailable(format!("方法名非法: {e}")))?;
+
+        let reply = match timeout(
+            self.timeout,
+            self.conn
+                .call_method(Some(dest), &path, Some(&iface), &member, &()),
+        )
+        .await
+        {
+            Ok(Ok(r)) => r,
+            Ok(Err(e)) => {
+                tracing::debug!("GetNeighborCellInformation call error: {e}");
+                return Ok(Vec::new());
+            }
+            Err(_) => {
+                tracing::debug!("GetNeighborCellInformation timeout");
+                return Ok(Vec::new());
+            }
+        };
+
+        match reply.body().deserialize::<Vec<(std::collections::HashMap<String, zbus::zvariant::OwnedValue>,)>>() {
+            Ok(data) => {
+                let mut list = Vec::with_capacity(data.len());
+                for (dict,) in data {
+                    if let Ok(raw) = serde_json::to_value(&dict) {
+                        list.push(zvariant_unwrap(&raw));
+                    }
+                }
+                Ok(list)
+            }
+            Err(e) => {
+                tracing::debug!("GetNeighborCellInformation deserialize error: {e}");
+                Ok(Vec::new())
+            }
+        }
+    }
+
+    /// 触发蜂窝空口主动全频段物理网络扫描（通过 `org.ofono.NetworkRegistration.Scan`）。
+    pub async fn ofono_scan_network(&self, modem_path: &str) -> AppResult<()> {
+        let dest = zbus::names::BusName::try_from(OFONO_SERVICE)
+            .map_err(|e| AppError::ServiceUnavailable(format!("D-Bus 目标非法: {e}")))?;
+        let path = zbus::zvariant::ObjectPath::try_from(modem_path)
+            .map_err(|e| AppError::ServiceUnavailable(format!("modem 路径非法: {e}")))?;
+        let iface = InterfaceName::try_from("org.ofono.NetworkRegistration")
+            .map_err(|e| AppError::ServiceUnavailable(format!("接口名非法: {e}")))?;
+        let member = zbus::names::MemberName::try_from("Scan")
+            .map_err(|e| AppError::ServiceUnavailable(format!("方法名非法: {e}")))?;
+
+        let _ = timeout(
+            Duration::from_secs(15),
+            self.conn
+                .call_method(Some(dest), &path, Some(&iface), &member, &()),
+        )
+        .await;
+        Ok(())
+    }
+
     /// 断线恢复：重新建立系统总线连接。调用方负责有界退避与重试次数上限。
     pub async fn reconnect(&self) -> AppResult<Self> {
         Self::connect(self.timeout).await
