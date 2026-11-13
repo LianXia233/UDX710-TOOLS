@@ -56,11 +56,18 @@
 
 ### 前端 UI
 
-- 白色毛玻璃（glassmorphism）主题，亮 / 暗 / 跟随系统三套变量
-- 动态 SVG 背景光晕、品牌标识、脉冲波形，纯 CSS / SMIL 动画
-- 三种弹窗：**Centered Modal Dialog**、**Modal Bottom Sheet**、**Right Side Sheet**
-- 全分辨率响应式：320px 至 1920px、手机横屏、平板、桌面、安全区、`100dvh`、44px 触屏点击区
-- 实时状态推送（WebSocket / SSE）、命令历史、主题与语言切换
+- 沉浸式白色毛玻璃（Glassmorphism）设计体系，支持亮色、暗色与跟随系统偏好
+- **无侧边栏设计（No Sidebar）**：桌面端采用顶部悬浮玻璃岛主导航（Header Dock）+ 全景应用中心；移动端采用悬浮毛玻璃底部导航条（Bottom Nav）+ Modal Bottom Sheet
+- **全套专业动态 SVG 遥测组件**：
+  - 5G 射频与基站拓扑雷达 HUD（`createHeroRadar`）
+  - 12 方位微刻度高精度环形遥测仪表盘（CPU、内存、电池、信号）
+  - 平滑贝塞尔样条动态波形图（`createSmoothSparkline`）
+  - 双向高频流速亚克力管道（`createTrafficStreamPipe`）
+  - 全息 5G 品牌标识与 3D 终端安全插画（SMIL 动画）
+- **界面去技术化与折叠收纳**：卡片副标题杜绝裸露 `/api/` 路径，冗余技术指南与输出日志支持原生可折叠卡片（`collapsibleCard`）收纳
+- 三种全景弹窗形态：**Centered Modal Dialog**、**Modal Bottom Sheet**、**Right Side Sheet**
+- 全分辨率响应式：覆盖 320px 至 1920px、折叠屏、平板、桌面、安全区、`100dvh`、44px 黄金点击区
+- 真实数据链路：WebSocket 高频自愈通道与 HTTP 降级无缝协同，零 Mock 零造假
 - 详见 [docs/UI.md](docs/UI.md)
 
 ## 看门狗与自愈

@@ -8,7 +8,28 @@
 
 ## [Unreleased]
 
-仓库清理：只保留重构后的实现，v2.x 旧源码与旧构建链全部移出工作树。
+### Added / Changed（2026-11-13 WebUI 沉浸式白色毛玻璃、动态 SVG 与导航重构）
+
+- **移除垂直侧边栏（No Sidebar 设计）**：
+  - 彻底移除了占据侧方大面积水平空间的传统垂直侧栏，改用顶部 **悬浮玻璃岛式主导航（Floating Header Dock）**。
+  - 居中呈现水平药丸导航（概览 Dashboard、蜂窝射频 Modem、流量监控 Traffic、短信中心 SMS、网络设定 Network、系统服务 System、全部功能 ▾）。
+  - 右侧集成 WebSocket 实时链路信标指示灯、多语言切换、亮/暗毛玻璃主题切换、页面刷新、安全退出及等宽实时数字时钟。
+  - 移动端引入 **悬浮毛玻璃底部导航条（Bottom Nav）**，触控点按丝滑切换常用模块；点击「全部」时平滑滑出 **Modal Bottom Sheet（底部抽屉）**，配备触控拖拽指示条与安全区适配。
+  - 新增「功能全景中心（Apps Catalog）」居中毛玻璃弹窗，4 大板块 17 个模块分类网格一览无余，支持一键直达。
+- **动态 SVG 全量重绘与组件化引擎**：
+  - 新建 `web/js/components/svg-gauges.js` 矢量渲染引擎，全原生 DOM / SVG 命名空间构建，符合严格 CSP：
+    - `createHeroRadar`：5G 基站与空口射频雷达 HUD，直连真实 RSRP/SINR，呈现基站发射台、5G-MIFI 核心终端与客户端节点，双向光子沿贝塞尔流线动态穿梭，核心波纹随信号强弱自适应变色。
+    - `createCircularGauge`：12 方位微刻度高精度环形遥测仪表，支持 CPU 负载、内存负载、电池电量、信号品质的平滑过渡（Cubic-bezier）与阈值告警变色（<=60% 正常 / 60%-85% 警告 / >85% 危险）。
+    - `createSmoothSparkline`：三次贝塞尔样条平滑动态波形图，配备渐变填充、柔光滤镜与末端脉冲聚光点。
+    - `createTrafficStreamPipe`：上行与下行双向独立透明亚克力水流管道，流动速度与真实上传/下载速率高频联动。
+  - 重绘 `web/icons/brand-live.svg`：全息 5G 芯片基座、双向差速旋转刻度环、能量呼吸核心与 3 级波束扩散，兼作动态浏览器 Favicon。
+  - 重绘 `web/icons/login-hero.svg`：3D 透视 5G 随身 WiFi 硬件终端造型，正面高透 OLED 屏幕实时呈现 5G SA 信号阶梯、电量指示与硬件级安全挂锁徽章。
+- **清除前端裸露 API 路径与文案折叠优化**：
+  - 全量扫描并替换所有卡片副标题中的原始后端接口路径（如 `/api/usb/mode`、`/api/info`、`/api/current_band`、`/api/charge/config`、`/api/get/Total`、`POST /api/at`、`POST /api/shell` 等），全部转为符合用户认知的自然语言说明。
+  - 在 `web/js/utils/dom.js` 中新增 `sanitizeSubtitle` 底层安全过滤器，杜绝后续直接泄露后端路由。
+  - 新增 `collapsibleCard`（`<details>` + CSS 贝塞尔缓动）可折叠卡片组件，将 USB 兼容性指南、系统健康诊断、单次命令执行控制台、固件升级终端日志等冗长参数与文案折叠收纳，大幅提升界面呼吸感与视觉清爽度。
+- **全真实数据无缝对接**：
+  - 绝无任何 Mock 或捏造伪造数据，全量对接 `/api/info`、`/api/current_band`、`/api/get/Total`、`/api/charge/config`、`/api/cells` 等真实接口与 WebSocket 实时自愈通道。
 
 ### Removed
 

@@ -7,8 +7,8 @@
 | 层 | 文件 | 职责 |
 | --- | --- | --- |
 | 设计变量 / 重置 | `web/css/tokens.css` | 白色半透明玻璃调色板、`--glass-blur`、`--glass-shadow`、圆角、间距；亮/暗/系统偏好三套变量 |
-| 布局 | `web/css/layout.css` | 侧边栏、顶栏、12 列页面网格、登录层、基础断点 |
-| 组件 | `web/css/components.css` | 卡片、按钮、输入、徽标、表格、Toast、原生 `<dialog>` 基础样式 |
+| 布局 | `web/css/layout.css` | 顶部悬浮玻璃岛主导航（Header Dock）、无侧边栏设计、移动端底部导航（Bottom Nav）、12 列网格、功能全景中心 |
+| 组件 | `web/css/components.css` | 卡片、折叠卡片（`<details>` 结合）、按钮、输入、徽标、表格、Toast、原生 `<dialog>` 基础样式 |
 | 玻璃质感 | `web/css/glass.css` | `backdrop-filter: blur() saturate()`、白边、内高光、渐变光晕背景、看门狗提示条 |
 | 弹窗形态 | `web/css/sheets.css` | 三种弹窗的定位、尺寸、把手、进退场动画 |
 | 响应式 | `web/css/responsive.css` | 全分辨率断点、安全区、`100dvh`、触屏点击区 |
@@ -19,16 +19,18 @@
 - **严格 CSP 不变**：`style-src 'self'`，样式全部来自同源 stylesheet；JS 只通过 CSSOM（`element.style`）设置 CSS 变量，不注入 `<style>` 标签。
 - 交互态（hover 抬升、激活渐变）在触屏设备上自动关闭，避免误触。
 
-## 2. 动态 SVG
+## 2. 动态 SVG 与遥测可视化组件
 
 | 文件 | 用途 | 动画方式 |
 | --- | --- | --- |
 | `web/icons/aurora.svg` | 全屏背景光晕，`body::before` 以 `background-image` 引入 | SMIL（`animate` / `animateTransform`）漂浮 |
-| `web/icons/brand-live.svg` | 侧边栏品牌标识 + favicon | SMIL 旋转 / 呼吸 |
+| `web/icons/brand-live.svg` | 顶部玻璃岛品牌标识 + favicon | SMIL 双向差速旋转刻度环 / 呼吸光晕 / 3级射频波束 |
+| `web/icons/login-hero.svg` | 登录卡片 3D 终端矢量视觉 | SMIL 旋转雷达环 / OLED 状态屏 / 动态波纹 |
 | `web/icons/pulse-wave.svg` | 仪表盘脉冲波形装饰 | SMIL 路径位移 |
+| `web/js/components/svg-gauges.js` | 核心动态遥测矢量引擎（`createHeroRadar`、`createCircularGauge`、`createSmoothSparkline`、`createTrafficStreamPipe`） | 原生 DOM SVG 命名空间 API，高帧率动态补间 |
 | `web/icons/sprite.svg` | 70 个 `<symbol>` 图标，通过 `<use href>` 引用 | 静态，颜色由 `currentColor` 继承 |
 
-均为同源静态资源，符合 `img-src 'self' data:`；不依赖 JS 定时器、不加载外部字体或 CDN。
+均为同源静态资源或纯原生 DOM 生成，严格符合 `default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:`；不依赖 JS 定时器动画循环、不引入外部 CDN 或构建工具。卡片标题自动清洗后端接口端点（`sanitizeSubtitle`），冗长参数与帮助说明支持使用 `collapsibleCard` 优雅折叠。
 
 ## 3. 三种弹窗形态
 
