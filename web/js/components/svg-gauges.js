@@ -5,6 +5,7 @@
  * 纯真实数据接入，支持平滑过渡与全分辨率响应式缩放。
  */
 import { el, SVG_NS } from '../utils/dom.js';
+import { formatRate } from '../utils/format.js';
 
 let gaugeCounter = 0;
 
@@ -364,29 +365,44 @@ export function createRfRangeBar({
 }
 
 /**
- * 平滑趋势图 (Smooth Spline Sparkline)
+ * 现代化交互式平滑吞吐波形走势图 (Smooth Spline Sparkline)
+ * - 原生兼容桌面鼠标悬停 (Hover) 与移动端触摸屏 (Touch/Drag) 滑动手势；
+ * - 实时标尺刻度：动态适配速率单位 (B/s, KB/s, MB/s)，消除裸露无单位数字；
+ * - 悬浮探针 HUD 卡片：随指针动态吸附折线，呈现具体时间与瞬时真实速率。
  */
 export function createSmoothSparkline({
   width = 600,
   height = 140,
   maxPoints = 120,
   strokeColor = '#2563eb',
-  fillColor = '#3b82f6'
+  fillColor = '#3b82f6',
+  label = '实时吞吐波形',
+  formatter = formatRate
 } = {}) {
   const series = [];
+  let currentPts = [];
+
   const svg = el('svg:svg', {
     class: 'sparkline-smooth',
     viewBox: `0 0 ${width} ${height}`,
     preserveAspectRatio: 'none',
     role: 'img',
-    'aria-label': '平滑动态趋势折线图'
+    'aria-label': '平滑动态吞吐趋势折线图',
+    style: {
+      touchAction: 'none',
+      userSelect: 'none',
+      cursor: 'crosshair',
+      display: 'block',
+      width: '100%',
+      height: `${height}px`
+    }
   });
 
   const defs = el('svg:defs');
   const gradId = `spark-grad-${Math.random().toString(36).slice(2, 8)}`;
   const grad = el('svg:linearGradient', { id: gradId, x1: '0%', y1: '0%', x2: '0%', y2: '100%' },
-    el('svg:stop', { offset: '0%', 'stop-color': fillColor, 'stop-opacity': '0.35' }),
-    el('svg:stop', { offset: '70%', 'stop-color': fillColor, 'stop-opacity': '0.08' }),
+    el('svg:stop', { offset: '0%', 'stop-color': fillColor, 'stop-opacity': '0.38' }),
+    el('svg:stop', { offset: '65%', 'stop-color': fillColor, 'stop-opacity': '0.10' }),
     el('svg:stop', { offset: '100%', 'stop-color': fillColor, 'stop-opacity': '0' })
   );
 
@@ -398,36 +414,98 @@ export function createSmoothSparkline({
     )
   );
 
-  defs.append(grad, glowFilter);
+  const shadowFilter = el('svg:filter', { id: `${gradId}-shadow`, x: '-20%', y: '-20%', width: '140%', height: '140%' },
+    el('svg:feDropShadow', { dx: '0', dy: '3', stdDeviation: '4', 'flood-color': 'rgba(15, 23, 42, 0.18)' })
+  );
+
+  defs.append(grad, glowFilter, shadowFilter);
   svg.appendChild(defs);
 
-  // 网格标尺
+  // ① 背景微网格标尺
   for (let i = 0; i <= 3; i += 1) {
     const y = i * (height / 3);
     svg.appendChild(el('svg:line', {
       x1: 0, y1: y, x2: width, y2: y,
-      stroke: 'var(--border)', 'stroke-opacity': '0.28', 'stroke-width': '1'
+      stroke: 'var(--border)', 'stroke-opacity': '0.3', 'stroke-width': '1', 'stroke-dasharray': i === 0 || i === 3 ? 'none' : '4 4'
     }));
   }
 
+  // ② 右侧 Y 轴动态速率标尺
+  const scaleMax = el('svg:text', {
+    x: width - 8, y: 14, fill: 'var(--text-muted)',
+    'font-size': '10', 'font-family': 'var(--mono)', 'text-anchor': 'end', text: '—'
+  });
+  const scaleMid = el('svg:text', {
+    x: width - 8, y: Math.round(height / 2) + 4, fill: 'var(--text-muted)',
+    'font-size': '10', 'font-family': 'var(--mono)', 'text-anchor': 'end', text: '—'
+  });
+  const scaleZero = el('svg:text', {
+    x: width - 8, y: height - 6, fill: 'var(--text-muted)',
+    'font-size': '10', 'font-family': 'var(--mono)', 'text-anchor': 'end', text: formatter(0)
+  });
+  svg.append(scaleMax, scaleMid, scaleZero);
+
+  // ③ 曲线与渐变区域
   const areaPath = el('svg:path', { fill: `url(#${gradId})`, d: '' });
   const linePath = el('svg:path', {
-    fill: 'none', stroke: strokeColor, 'stroke-width': '2.2',
+    fill: 'none', stroke: strokeColor, 'stroke-width': '2.4',
     'stroke-linecap': 'round', 'stroke-linejoin': 'round',
     filter: `url(#${gradId}-glow)`, d: ''
   });
 
+  // ④ 最新数据端点发光信标
+  const beaconGroup = el('svg:g', { style: { display: 'none' } });
+  const pulseRing = el('svg:circle', {
+    r: '4', fill: 'none', stroke: strokeColor, 'stroke-width': '1.5'
+  },
+    el('svg:animate', { attributeName: 'r', values: '4;14', dur: '1.8s', repeatCount: 'indefinite' }),
+    el('svg:animate', { attributeName: 'opacity', values: '0.9;0', dur: '1.8s', repeatCount: 'indefinite' })
+  );
   const pulseDot = el('svg:circle', {
-    r: '4', fill: '#ffffff', stroke: strokeColor, 'stroke-width': '2',
-    cx: width, cy: height, style: { display: 'none' }
+    r: '4', fill: '#ffffff', stroke: strokeColor, 'stroke-width': '2.5'
   });
+  beaconGroup.append(pulseRing, pulseDot);
 
+  // ⑤ 顶部 HUD 动态文本栏
   const infoText = el('svg:text', {
-    x: 8, y: 14, fill: 'var(--text-muted)',
-    'font-size': '10.5', 'font-family': 'var(--mono)', text: ''
+    x: 8, y: 15, fill: 'var(--text)',
+    'font-size': '11', 'font-weight': '650', 'font-family': 'var(--font)', text: ''
   });
 
-  svg.append(areaPath, linePath, pulseDot, infoText);
+  // ⑥ 交互式十字准星垂直探针线 (Crosshair Hairline)
+  const crosshairLine = el('svg:line', {
+    y1: 0, y2: height, stroke: 'var(--primary, #087cba)', 'stroke-width': '1.2',
+    'stroke-dasharray': '3 3', style: { display: 'none', pointerEvents: 'none' }
+  });
+
+  // ⑦ 交互式吸附点 (Focus Circle)
+  const focusCircle = el('svg:circle', {
+    r: '5', fill: '#ffffff', stroke: 'var(--primary, #087cba)', 'stroke-width': '2.5',
+    style: { display: 'none', pointerEvents: 'none' }
+  });
+
+  // ⑧ 悬浮探针 HUD 卡片 (Interactive Tooltip Pill)
+  const tooltipGroup = el('svg:g', {
+    style: { display: 'none', pointerEvents: 'none', transition: 'transform 0.08s ease-out' }
+  });
+  const tooltipBg = el('svg:rect', {
+    x: 0, y: 0, width: 142, height: 42, rx: 6,
+    fill: 'var(--surface-overlay, #ffffff)',
+    stroke: 'var(--primary, #087cba)',
+    'stroke-width': '1.2',
+    filter: `url(#${gradId}-shadow)`
+  });
+  const ttTimeText = el('svg:text', {
+    x: 10, y: 16, fill: 'var(--text-muted, #5f7a93)',
+    'font-size': '9.5', 'font-family': 'var(--mono)'
+  });
+  const ttValText = el('svg:text', {
+    x: 10, y: 32, fill: 'var(--primary, #087cba)',
+    'font-size': '12.5', 'font-weight': '750', 'font-family': 'var(--mono)'
+  });
+  tooltipGroup.append(tooltipBg, ttTimeText, ttValText);
+
+  svg.append(areaPath, linePath, beaconGroup, infoText, crosshairLine, focusCircle, tooltipGroup);
 
   function buildSpline(pts) {
     if (pts.length < 2) return '';
@@ -452,7 +530,7 @@ export function createSmoothSparkline({
     if (series.length < 2) {
       linePath.setAttribute('d', '');
       areaPath.setAttribute('d', '');
-      pulseDot.style.display = 'none';
+      beaconGroup.style.display = 'none';
       return;
     }
     const maxVal = Math.max(1, ...series);
@@ -460,22 +538,85 @@ export function createSmoothSparkline({
     const pts = series.map((v, i) => {
       const x = i * step;
       const ratio = Math.max(0, Math.min(1, v / maxVal));
-      const y = height - ratio * (height - 14) - 7;
+      const y = height - ratio * (height - 24) - 10;
       return { x, y };
     });
+    currentPts = pts;
 
     const d = buildSpline(pts);
     linePath.setAttribute('d', d);
     areaPath.setAttribute('d', `${d} L ${width} ${height} L 0 ${height} Z`);
 
     const lastPt = pts[pts.length - 1];
+    pulseRing.setAttribute('cx', lastPt.x.toFixed(1));
+    pulseRing.setAttribute('cy', lastPt.y.toFixed(1));
     pulseDot.setAttribute('cx', lastPt.x.toFixed(1));
     pulseDot.setAttribute('cy', lastPt.y.toFixed(1));
-    pulseDot.style.display = 'block';
+    beaconGroup.style.display = 'block';
 
     const latest = series[series.length - 1];
-    infoText.textContent = `实时: ${latest.toFixed(1)} · 峰值: ${maxVal.toFixed(1)}`;
+    infoText.textContent = `实时: ${formatter(latest)}  ·  峰值: ${formatter(maxVal)}`;
+
+    // 更新右侧刻度
+    scaleMax.textContent = formatter(maxVal);
+    scaleMid.textContent = formatter(maxVal / 2);
   }
+
+  // 鼠标与触控事件处理（Pointer Events API，自动兼容桌面鼠标与手机/平板触摸屏）
+  let leaveTimer = null;
+  function handlePointer(ev) {
+    if (series.length < 2 || currentPts.length === 0) return;
+    if (leaveTimer) { clearTimeout(leaveTimer); leaveTimer = null; }
+
+    const rect = svg.getBoundingClientRect();
+    const clientX = ev.clientX;
+    const clientY = ev.clientY;
+    if (clientX < rect.left || clientX > rect.right) return;
+
+    const xInSvg = Math.max(0, Math.min(width, ((clientX - rect.left) / rect.width) * width));
+    const step = width / (series.length - 1);
+    const idx = Math.max(0, Math.min(series.length - 1, Math.round(xInSvg / step)));
+    const pt = currentPts[idx];
+    if (!pt) return;
+
+    const val = series[idx];
+    const timeAgoSec = Math.round((series.length - 1 - idx) * 2);
+
+    crosshairLine.setAttribute('x1', pt.x.toFixed(1));
+    crosshairLine.setAttribute('x2', pt.x.toFixed(1));
+    crosshairLine.style.display = 'block';
+
+    focusCircle.setAttribute('cx', pt.x.toFixed(1));
+    focusCircle.setAttribute('cy', pt.y.toFixed(1));
+    focusCircle.style.display = 'block';
+
+    ttTimeText.textContent = idx === series.length - 1 ? '● 最新实时采样点' : `● ${timeAgoSec} 秒前采样 (点 #${idx + 1})`;
+    ttValText.textContent = `流速: ${formatter(val)}`;
+
+    let ttX = pt.x + 12;
+    let ttY = Math.max(6, Math.min(height - 48, pt.y - 22));
+    if (ttX + 148 > width) {
+      ttX = pt.x - 152;
+    }
+    tooltipGroup.setAttribute('transform', `translate(${ttX.toFixed(1)}, ${ttY.toFixed(1)})`);
+    tooltipGroup.style.display = 'block';
+  }
+
+  function handlePointerLeave() {
+    if (leaveTimer) clearTimeout(leaveTimer);
+    leaveTimer = setTimeout(() => {
+      crosshairLine.style.display = 'none';
+      focusCircle.style.display = 'none';
+      tooltipGroup.style.display = 'none';
+    }, 1200);
+  }
+
+  svg.addEventListener('pointerenter', handlePointer);
+  svg.addEventListener('pointermove', handlePointer);
+  svg.addEventListener('pointerdown', handlePointer);
+  svg.addEventListener('pointerleave', handlePointerLeave);
+  svg.addEventListener('pointerup', handlePointerLeave);
+  svg.addEventListener('pointercancel', handlePointerLeave);
 
   return {
     el: svg,
@@ -486,6 +627,7 @@ export function createSmoothSparkline({
     },
     clear() {
       series.length = 0;
+      currentPts = [];
       redraw();
     }
   };

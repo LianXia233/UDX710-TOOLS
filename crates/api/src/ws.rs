@@ -275,7 +275,11 @@ pub async fn status_ws(ws: WebSocketUpgrade, State(state): State<AppState>) -> R
                 "type": "traffic",
                 "data": {
                     "rate": m.traffic_rate.round() as u64,
+                    "rx_rate": m.rx_rate.round() as u64,
+                    "tx_rate": m.tx_rate.round() as u64,
                     "total": m.traffic_total,
+                    "rx": m.rx_total,
+                    "tx": m.tx_total,
                 }
             });
             let signal = json!({

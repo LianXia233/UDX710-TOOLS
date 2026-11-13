@@ -185,10 +185,14 @@ export function render(container, context) {
       activeSlot = curSlot;
       if (curSlot === 2) {
         slot1Btn.className = 'btn btn--ghost btn--sm';
+        slot1Btn.textContent = '卡槽 1 (默认主卡)';
         slot2Btn.className = 'btn btn--primary btn--sm';
+        slot2Btn.textContent = '✓ 卡槽 2 (副卡在用)';
       } else {
         slot1Btn.className = 'btn btn--primary btn--sm';
+        slot1Btn.textContent = '✓ 卡槽 1 (默认主卡在用)';
         slot2Btn.className = 'btn btn--ghost btn--sm';
+        slot2Btn.textContent = '卡槽 2 (副卡)';
       }
 
       const i = fieldOf(info, 'data', info) || {};

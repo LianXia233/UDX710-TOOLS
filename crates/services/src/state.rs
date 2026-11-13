@@ -42,7 +42,11 @@ pub struct MetricsSnapshot {
     pub mem_total: u64,
     pub temperature: Option<f64>,
     pub traffic_total: u64,
+    pub rx_total: u64,
+    pub tx_total: u64,
     pub traffic_rate: f64,
+    pub rx_rate: f64,
+    pub tx_rate: f64,
     pub rsrp: Option<i64>,
     pub updated_ts: i64,
 }
@@ -139,6 +143,8 @@ impl AppServices {
                 let mut ticker = tokio::time::interval(Duration::from_secs(3));
                 ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
                 let mut last_total: u64 = 0;
+                let mut last_rx: u64 = 0;
+                let mut last_tx: u64 = 0;
                 let mut last_at = Instant::now();
                 loop {
                     tokio::select! {
@@ -158,16 +164,29 @@ impl AppServices {
                     }
                     if let Ok(t) = net.traffic_total().await {
                         let total = t.get("total").and_then(|v| v.as_u64()).unwrap_or(0);
+                        let rx = t.get("rx").and_then(|v| v.as_u64()).unwrap_or(0);
+                        let tx = t.get("tx").and_then(|v| v.as_u64()).unwrap_or(0);
                         let now = Instant::now();
                         let dt = now.duration_since(last_at).as_secs_f64().max(0.001);
                         // total 回落说明设备重启，速率归零重新计。
-                        next.traffic_rate = if last_total == 0 || total < last_total {
-                            0.0
+                        let (rate, rx_r, tx_r) = if last_total == 0 || total < last_total {
+                            (0.0, 0.0, 0.0)
                         } else {
-                            (total - last_total) as f64 / dt
+                            (
+                                (total - last_total) as f64 / dt,
+                                (rx.saturating_sub(last_rx)) as f64 / dt,
+                                (tx.saturating_sub(last_tx)) as f64 / dt,
+                            )
                         };
+                        next.traffic_rate = rate;
+                        next.rx_rate = rx_r;
+                        next.tx_rate = tx_r;
                         next.traffic_total = total;
+                        next.rx_total = rx;
+                        next.tx_total = tx;
                         last_total = total;
+                        last_rx = rx;
+                        last_tx = tx;
                         last_at = now;
                     }
                     if let Ok(b) = modem.current_band().await {

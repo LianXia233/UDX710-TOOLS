@@ -660,20 +660,42 @@ fn validate_id(id: &str) -> AppResult<()> {
 }
 
 fn parse_netdev_totals(text: &str) -> (u64, u64) {
-    let mut rx = 0u64;
-    let mut tx = 0u64;
+    let mut sipa_eth0_rx = 0u64;
+    let mut sipa_eth0_tx = 0u64;
+    let mut sipa_eth0_found = false;
+
+    let mut fallback_rx = 0u64;
+    let mut fallback_tx = 0u64;
+
     for line in text.lines().skip(2) {
-        let Some((_, values)) = line.split_once(':') else { continue };
+        let Some((iface, values)) = line.split_once(':') else { continue };
+        let ifname = iface.trim();
         let nums: Vec<u64> = values
             .split_whitespace()
             .filter_map(|v| v.parse::<u64>().ok())
             .collect();
-        if nums.len() >= 10 {
-            rx = rx.saturating_add(nums[0]);
-            tx = tx.saturating_add(nums[8]);
+        if nums.len() < 10 {
+            continue;
+        }
+
+        if ifname == "sipa_eth0" {
+            sipa_eth0_rx = nums[0];
+            sipa_eth0_tx = nums[8];
+            sipa_eth0_found = true;
+        }
+
+        // 过滤回环、SIPA 镜像重复口以及内部 IPC 通道
+        if ifname != "lo" && ifname != "sipa_usb0" && !ifname.starts_with("vpcie") {
+            fallback_rx = fallback_rx.saturating_add(nums[0]);
+            fallback_tx = fallback_tx.saturating_add(nums[8]);
         }
     }
-    (rx, tx)
+
+    if sipa_eth0_found {
+        (sipa_eth0_rx, sipa_eth0_tx)
+    } else {
+        (fallback_rx, fallback_tx)
+    }
 }
 
 #[cfg(test)]

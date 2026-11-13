@@ -9,6 +9,8 @@ import { createSmoothSparkline, createSpeedArcGauge } from '../components/svg-ga
 let ctx = null;
 let sparkline = null;
 let lastBytes = 0;
+let lastRx = 0;
+let lastTx = 0;
 let lastTime = Date.now();
 let peakDl = 0;
 let peakUl = 0;
@@ -17,6 +19,8 @@ const refs = {};
 export function render(container, context) {
   ctx = context;
   lastBytes = 0;
+  lastRx = 0;
+  lastTx = 0;
   lastTime = Date.now();
   peakDl = 0;
   peakUl = 0;
@@ -228,12 +232,18 @@ export function render(container, context) {
       const now = Date.now();
       const timeDelta = Math.max(0.5, (now - lastTime) / 1000);
       const bytesDelta = lastBytes ? Math.max(0, total - lastBytes) : 0;
+      const rxDelta = lastRx ? Math.max(0, rx - lastRx) : 0;
+      const txDelta = lastTx ? Math.max(0, tx - lastTx) : 0;
       const currentRate = bytesDelta / timeDelta;
+      const rxRate = rxDelta / timeDelta;
+      const txRate = txDelta / timeDelta;
       lastBytes = total;
+      lastRx = rx;
+      lastTx = tx;
       lastTime = now;
 
-      updateSpeedMeter(currentRate, 0);
-      if (sparkline && currentRate > 0) sparkline.push(currentRate);
+      updateSpeedMeter(rxRate || currentRate, txRate);
+      if (sparkline) sparkline.push(currentRate);
 
       const much = Number(fieldOf(refs.cfg, 'much', 0)) || 0;
       if (much > 0) {
@@ -264,10 +274,10 @@ export function render(container, context) {
   ctx.wsSubscribe('traffic', (p) => {
     const o = (p && (p.data || p)) || {};
     const rate = Number(o.rate != null ? o.rate : o.delta) || 0;
-    if (rate > 0) {
-      updateSpeedMeter(rate, 0);
-      if (sparkline) sparkline.push(rate);
-    }
+    const rxRate = Number(o.rx_rate != null ? o.rx_rate : rate) || 0;
+    const txRate = Number(o.tx_rate != null ? o.tx_rate : 0) || 0;
+    updateSpeedMeter(rxRate, txRate);
+    if (sparkline) sparkline.push(rate);
   });
 
   loadConfig().then(loadTotal);

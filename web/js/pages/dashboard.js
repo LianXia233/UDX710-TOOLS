@@ -133,6 +133,8 @@ export function render(container, context) {
   let infoCache = {};
   let bandCache = {};
   let lastBytes = 0;
+  let lastRx = 0;
+  let lastTx = 0;
   let lastTime = Date.now();
 
   function applyInfo(info) {
@@ -225,14 +227,20 @@ export function render(container, context) {
     const now = Date.now();
     const timeDelta = Math.max(0.5, (now - lastTime) / 1000);
     const bytesDelta = lastBytes ? Math.max(0, totalBytes - lastBytes) : 0;
+    const rxDelta = lastRx ? Math.max(0, rx - lastRx) : 0;
+    const txDelta = lastTx ? Math.max(0, tx - lastTx) : 0;
     const currentRate = bytesDelta / timeDelta;
+    const rxRate = rxDelta / timeDelta;
+    const txRate = txDelta / timeDelta;
     lastBytes = totalBytes;
+    lastRx = rx;
+    lastTx = tx;
     lastTime = now;
 
-    teleDl.update(formatRate(currentRate), Math.min(100, (currentRate / 5242880) * 100), `累计下载: ${formatBytes(rx)}`, 'var(--primary)');
-    teleUl.update('0 B/s', 0, `累计上传: ${formatBytes(tx)}`, 'var(--ok)');
+    teleDl.update(formatRate(rxRate || currentRate), Math.min(100, ((rxRate || currentRate) / 5242880) * 100), `累计下载: ${formatBytes(rx)}`, 'var(--primary)');
+    teleUl.update(formatRate(txRate), Math.min(100, (txRate / 1048576) * 100), `累计上传: ${formatBytes(tx)}`, 'var(--ok)');
 
-    if (currentRate > 0) sparkline.push(currentRate);
+    sparkline.push(currentRate);
   }
 
   function applyCharge(charge) {
@@ -251,8 +259,7 @@ export function render(container, context) {
         ctx.api('/api/charge/config', { signal: ctx.signal }).catch(() => null)
       ]);
 
-      const cpu = applyInfo(info);
-      sparkline.push(cpu);
+      applyInfo(info);
       if (band) applyBand(band);
       if (total) applyTotal(total);
       if (charge) applyCharge(charge);
@@ -267,16 +274,16 @@ export function render(container, context) {
     const cpu = Number(o.cpu_usage != null ? o.cpu_usage : o.cpu) || 0;
     const cpuColor = cpu >= 85 ? 'var(--danger)' : (cpu >= 65 ? 'var(--warning)' : 'var(--primary)');
     teleCpu.update(`${cpu.toFixed(1)}%`, cpu, undefined, cpuColor);
-    sparkline.push(cpu);
   });
 
   ctx.wsSubscribe('traffic', (p) => {
     const o = (p && (p.data || p)) || {};
     const rate = Number(o.rate != null ? o.rate : o.delta) || 0;
-    if (rate > 0) {
-      teleDl.update(formatRate(rate), Math.min(100, (rate / 5242880) * 100));
-      sparkline.push(rate);
-    }
+    const rxRate = Number(o.rx_rate != null ? o.rx_rate : rate) || 0;
+    const txRate = Number(o.tx_rate != null ? o.tx_rate : 0) || 0;
+    teleDl.update(formatRate(rxRate), Math.min(100, (rxRate / 5242880) * 100));
+    teleUl.update(formatRate(txRate), Math.min(100, (txRate / 1048576) * 100));
+    sparkline.push(rate);
   });
 
   ctx.wsSubscribe('signal', (p) => {

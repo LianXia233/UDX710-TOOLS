@@ -532,7 +532,13 @@ impl ModemService {
 
     /// SIM 卡槽切换与控制（支持卡槽 1 与卡槽 2，默认卡槽为 1）。
     pub async fn switch_slot(&self, payload: &Value) -> AppResult<Value> {
-        let slot = payload.get("slot").and_then(|v| v.as_u64()).unwrap_or(1);
+        let slot = payload
+            .get("slot")
+            .and_then(|v| {
+                v.as_u64()
+                    .or_else(|| v.as_str().and_then(|s| s.parse().ok()))
+            })
+            .unwrap_or(1);
         let actual_slot = if slot == 2 { 2 } else { 1 };
         let sim_target = if actual_slot == 2 { "esim2" } else { "esim1" };
 
@@ -562,9 +568,19 @@ impl ModemService {
             .await
         {
             let text = String::from_utf8_lossy(&out.stdout);
-            if text.contains("esim2") {
+            if let Ok(v) = serde_json::from_str::<Value>(&text) {
+                if let Some(cur) = v.get("context").and_then(|c| c.get("current_sim")).and_then(|s| s.as_str()) {
+                    if cur == "esim2" {
+                        current_slot = 2;
+                    } else if cur == "esim3" {
+                        current_slot = 3;
+                    } else {
+                        current_slot = 1;
+                    }
+                }
+            } else if text.contains("\"current_sim\":\"esim2\"") {
                 current_slot = 2;
-            } else if text.contains("esim1") {
+            } else {
                 current_slot = 1;
             }
         } else if let Ok(val) = self.cfg_get("modem.sim_slot", json!({"slot": 1})).await {
