@@ -177,7 +177,8 @@ export function render(container, context) {
   });
 
   loadTotal();
-  ctx.interval(loadTotal, 5000);
+  // 速率已由 WS 推送，这里只做兜底轮询，放宽到 15 秒。
+  ctx.interval(loadTotal, 15000);
 }
 
 export function destroy() {

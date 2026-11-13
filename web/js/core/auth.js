@@ -7,7 +7,7 @@
  *  - 真正的安全性由服务端 Bearer 校验负责，本地过期判断仅为体验优化；
  *    服务端 401 时 api.js 会清除凭证并派发 auth-required。
  */
-import { api, TOKEN_KEY, META_KEY } from './api.js';
+import { api, TOKEN_KEY, META_KEY, PERSIST_KEY } from './api.js';
 import * as store from './store.js';
 import * as events from './events.js';
 
@@ -26,8 +26,6 @@ function writeMeta(meta) {
  * 重新登录，体验很差。这里在 localStorage 留一份带过期时间的副本作为
  * 兜底；真正的授权仍由服务端 Bearer 校验与 24h TTL 决定。
  */
-const PERSIST_KEY = 'udx.auth.persist';
-
 function readPersisted() {
   try {
     const raw = localStorage.getItem(PERSIST_KEY);

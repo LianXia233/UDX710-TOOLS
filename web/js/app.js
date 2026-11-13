@@ -226,8 +226,10 @@ function setConnection(status) {
   const label = document.getElementById('conn-label');
   const map = {
     open: ['ok', i18n.t('app.online')],
+    'open-sse': ['warning', 'HTTP 轮询（降级）'],
     connecting: ['warning', i18n.t('app.connecting')],
     reconnecting: ['warning', i18n.t('app.connecting')],
+    offline: ['muted', '网络离线'],
     closed: ['muted', i18n.t('app.offline')],
     failed: ['error', i18n.t('app.offline')],
     error: ['error', i18n.t('app.offline')]

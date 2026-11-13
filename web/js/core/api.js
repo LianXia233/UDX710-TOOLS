@@ -13,6 +13,8 @@
 export const API_BASE = '/api';
 export const TOKEN_KEY = 'auth_token';
 export const META_KEY = 'udx710.auth.meta';
+/** 持久副本键：sessionStorage 被清（隐私模式 / 浏览器重启 / 换标签打开）时兜底。 */
+export const PERSIST_KEY = 'udx.auth.persist';
 
 const DEFAULT_TIMEOUT = 10000;
 const MAX_BODY_BYTES = 16 * 1024 * 1024; // 16 MiB，单次响应上限
@@ -37,16 +39,42 @@ function toUrl(path) {
   return `${API_BASE}${p}`;
 }
 
+/**
+ * 取会话 token。
+ *
+ * sessionStorage 是主存储；若已被清空（隐私模式、浏览器重启、从其他标签
+ * 或快捷方式重新打开），回落到 localStorage 里的持久副本并回填会话副本，
+ * 避免每次打开面板都要求重新登录。有效期仍由副本里的 expiresAt 与服务端
+ * Bearer 校验共同约束。
+ */
 function getToken() {
-  try { return sessionStorage.getItem(TOKEN_KEY) || ''; } catch (e) { return ''; }
+  try {
+    const direct = sessionStorage.getItem(TOKEN_KEY);
+    if (direct) return direct;
+  } catch (e) { /* 继续尝试持久副本 */ }
+  try {
+    const raw = localStorage.getItem(PERSIST_KEY);
+    if (!raw) return '';
+    const obj = JSON.parse(raw);
+    if (!obj || !obj.token) return '';
+    if (obj.expiresAt && Date.now() > obj.expiresAt) {
+      localStorage.removeItem(PERSIST_KEY);
+      return '';
+    }
+    try { sessionStorage.setItem(TOKEN_KEY, obj.token); } catch (e) { /* 忽略 */ }
+    return obj.token;
+  } catch (e) {
+    return '';
+  }
 }
 
-/** 401：清除会话凭证并通知应用层跳转登录。 */
+/** 401：清除会话凭证与持久副本，并通知应用层跳转登录。 */
 function handleUnauthorized() {
   try {
     sessionStorage.removeItem(TOKEN_KEY);
     sessionStorage.removeItem(META_KEY);
-  } catch (e) { /* sessionStorage 不可用时忽略 */ }
+    localStorage.removeItem(PERSIST_KEY);
+  } catch (e) { /* 存储不可用时忽略 */ }
   window.dispatchEvent(new CustomEvent('auth-required'));
 }
 

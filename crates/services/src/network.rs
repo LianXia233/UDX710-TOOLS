@@ -209,20 +209,36 @@ impl NetworkService {
             month_base = last_total;
         }
 
-        let _ = self
-            .db
-            .config_set(
-                "traffic.snapshot",
-                &json!({
-                    "v": 2,
-                    "day": today,
-                    "month": month,
-                    "day_base": day_base,
-                    "month_base": month_base,
-                    "last_total": total,
-                }),
-            )
-            .await;
+        // 写库限频：traffic_total 会被 WS 采样任务每 3 秒调用一次，
+        // 每次写 SQLite 会与其它请求抢锁并拖慢推送。只在基线真正变化
+        // （跨日 / 跨月 / 重启 / 首次）或距上次写入超过 60 秒时才落库。
+        let now_s = udx_storage::now_ts();
+        let last_write = snap
+            .get("written_at")
+            .and_then(|v| v.as_i64())
+            .unwrap_or(0);
+        let need_write = !schema_ok
+            || rebooted
+            || snap_day != today
+            || snap_month != month
+            || now_s.saturating_sub(last_write) >= 60;
+        if need_write {
+            let _ = self
+                .db
+                .config_set(
+                    "traffic.snapshot",
+                    &json!({
+                        "v": 2,
+                        "day": today,
+                        "month": month,
+                        "day_base": day_base,
+                        "month_base": month_base,
+                        "last_total": total,
+                        "written_at": now_s,
+                    }),
+                )
+                .await;
+        }
 
         (total.saturating_sub(day_base), total.saturating_sub(month_base))
     }

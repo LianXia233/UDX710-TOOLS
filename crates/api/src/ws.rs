@@ -24,7 +24,7 @@ use axum::{
     },
     Extension,
 };
-use futures_util::{stream, StreamExt};
+use futures_util::{stream, SinkExt, StreamExt};
 use serde_json::{json, Value};
 use std::convert::Infallible;
 use std::sync::atomic::Ordering;
@@ -225,17 +225,33 @@ async fn terminal_session(
 /// 只读状态 WebSocket（前端 websocket.js 使用）。
 /// `/api/ws`：状态推送。
 ///
-/// 除健康摘要外，同时推送前端 `wsSubscribe('stats'|'traffic'|'signal')` 订阅的
-/// 三类实时数据。此前只推 `health`，导致页面的「实时趋势」只能靠 5 秒轮询，
-/// 信号曲线永远是 0。
+/// 推送内容来自 `AppServices::metrics` 的共享快照（后台每 3 秒采集一次），
+/// 连接本身只做内存读取与发送，不做 /proc 读取、SQLite 写入或 D-Bus 调用。
+/// 这样多开页面、刷新页面都不会叠加后端负载 —— 这是连接稳定的前提。
+///
+/// 同时每 20 秒发一次 Ping：浏览器与中间代理会回收长时间无数据的连接，
+/// 心跳能让空闲页面也保持在线（浏览器会自动回 Pong，无需前端配合）。
 pub async fn status_ws(ws: WebSocketUpgrade, State(state): State<AppState>) -> Response {
-    ws.on_upgrade(move |mut socket| async move {
+    ws.on_upgrade(move |socket| async move {
+        let (mut sender, mut receiver) = socket.split();
+        // 必须持续读：处理 Close / Pong 帧并及时感知客户端断开。
+        // 只发不收时，要等到下一次写入失败才发现对端已关，会滞留一条连接。
+        tokio::spawn(async move {
+            while let Some(Ok(_)) = receiver.next().await {}
+        });
+
         let mut ticker = tokio::time::interval(Duration::from_secs(2));
         ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-        let mut last_total: u64 = 0;
-        let mut last_at = Instant::now();
+        let mut ticks: u32 = 0;
         loop {
             ticker.tick().await;
+            ticks = ticks.wrapping_add(1);
+
+            if ticks % 10 == 0 && sender.send(Message::Ping(Vec::new())).await.is_err() {
+                return;
+            }
+
+            let m = state.services.metrics.read().await.clone();
 
             let health = json!({
                 "type": "health",
@@ -243,65 +259,37 @@ pub async fn status_ws(ws: WebSocketUpgrade, State(state): State<AppState>) -> R
                 "dbus_ok": state.services.dbus_ok.load(Ordering::Relaxed),
                 "active_tasks": state.services.tasks.active(),
             });
-
-            // 系统资源：CPU / 内存（/proc 只读，开销极小）。
-            let stats = match state
-                .services
-                .network
-                .system_info(env!("CARGO_PKG_VERSION"))
-                .await
-            {
-                Ok(info) => json!({
-                    "type": "stats",
-                    "data": {
-                        "cpu_usage": info.get("cpu_usage").cloned().unwrap_or(json!(0.0)),
-                        "mem_used": info.get("mem_used").cloned().unwrap_or(json!(0)),
-                        "mem_total": info.get("mem_total").cloned().unwrap_or(json!(0)),
-                        "temperature": info.get("temperature").cloned().unwrap_or(Value::Null),
-                    }
-                }),
-                Err(_) => json!({"type": "stats", "data": {"cpu_usage": 0.0}}),
-            };
-
-            // 流量速率：相邻两次采样的字节差 / 时间差。总计数回落说明设备重启过。
-            let total = state
-                .services
-                .network
-                .traffic_total()
-                .await
-                .ok()
-                .and_then(|v| v.get("total").and_then(|t| t.as_u64()))
-                .unwrap_or(last_total);
-            let now = Instant::now();
-            let elapsed = now.duration_since(last_at).as_secs_f64().max(0.001);
-            let rate = if last_total == 0 {
-                0.0
-            } else {
-                total.saturating_sub(last_total) as f64 / elapsed
-            };
-            last_total = total;
-            last_at = now;
+            let stats = json!({
+                "type": "stats",
+                "data": {
+                    "cpu_usage": m.cpu_usage,
+                    "mem_used": m.mem_used,
+                    "mem_total": m.mem_total,
+                    "temperature": match m.temperature {
+                        Some(v) => json!(v),
+                        None => Value::Null,
+                    },
+                }
+            });
             let traffic = json!({
                 "type": "traffic",
-                "data": {"rate": rate.round() as u64, "total": total}
+                "data": {
+                    "rate": m.traffic_rate.round() as u64,
+                    "total": m.traffic_total,
+                }
             });
-
-            // 信号：无 Modem 对象时 rsrp 为 null，前端显示「—」而不是 0 dBm。
-            let rsrp = state
-                .services
-                .modem
-                .current_band()
-                .await
-                .ok()
-                .and_then(|v| v.get("rsrp").cloned())
-                .unwrap_or(Value::Null);
             let signal = json!({
                 "type": "signal",
-                "data": {"rsrp": rsrp}
+                "data": {
+                    "rsrp": match m.rsrp {
+                        Some(v) => json!(v),
+                        None => Value::Null,
+                    }
+                }
             });
 
             for payload in [health, stats, traffic, signal] {
-                if socket.send(Message::Text(payload.to_string())).await.is_err() {
+                if sender.send(Message::Text(payload.to_string())).await.is_err() {
                     return;
                 }
             }

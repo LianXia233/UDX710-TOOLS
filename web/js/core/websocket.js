@@ -35,6 +35,7 @@ export class ManagedSocket {
     this._retries = 0;
     this._closed = false;
     this._status = 'idle';
+    this._onlineHandler = null;   // 网络恢复监听（离线挂起时使用）
   }
 
   _buildUrl() {
@@ -143,6 +144,20 @@ export class ManagedSocket {
       this._setStatus('failed', err);
       return;
     }
+    // 浏览器离线时不要空转退避：那会把重试次数耗光，且恢复时间点不可控。
+    // 挂起等待 online 事件，网络一恢复立即重连（重试计数归零）。
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      this._setStatus('offline');
+      if (!this._onlineHandler) {
+        this._onlineHandler = () => {
+          this._onlineHandler = null;
+          this._retries = 0;
+          if (!this._closed) this.connect();
+        };
+        window.addEventListener('online', this._onlineHandler);
+      }
+      return;
+    }
     this._retries += 1;
     const delay = Math.min(this.options.maxDelay, this.options.baseDelay * (2 ** (this._retries - 1)));
     this._setStatus('reconnecting', { attempt: this._retries, delay });
@@ -157,6 +172,10 @@ export class ManagedSocket {
     if (this._closed) return;
     this._closed = true;
     if (this._timer) { clearTimeout(this._timer); this._timer = null; }
+    if (this._onlineHandler) {
+      try { window.removeEventListener('online', this._onlineHandler); } catch (e) { /* 忽略 */ }
+      this._onlineHandler = null;
+    }
     if (this._ws) {
       try { this._ws.close(1000, 'page leave'); } catch (e) { /* 忽略 */ }
       this._ws = null;
@@ -173,13 +192,18 @@ export class ManagedSocket {
 function createRealtime() {
   const subs = new Map();      // topic -> Map<fn, owner>
   const statusFns = new Set();
-  const FALLBACK_THRESHOLD = 2;
+  // 2 次太激进：页面刚打开时 token 可能还没就绪、后端可能刚重启，
+  // 一两次瞬断就把整个会话永久钉在 SSE 上（这正是「一直降级」的成因）。
+  const FALLBACK_THRESHOLD = 4;
+  // 降级后定期回切 WebSocket，SSE 只作兜底而不是终点。
+  const RECOVER_INTERVAL = 30000;
   let ws = null;
   let sse = null;
   let started = false;
   let mode = 'ws';
   let failures = 0;
   let status = 'idle';
+  let recoverTimer = null;
 
   function setStatus(s, detail) {
     status = s;
@@ -206,7 +230,9 @@ function createRealtime() {
     }
     try {
       sse = new EventSource(tokenQuery('/api/events'));
-      sse.addEventListener('open', () => setStatus('open'));
+      sse.addEventListener('open', () => {
+        if (mode === 'sse') setStatus('open-sse');
+      });
       sse.addEventListener('message', (ev) => {
         let parsed = null;
         try { parsed = JSON.parse(ev.data); } catch (e) { parsed = null; }
@@ -218,25 +244,57 @@ function createRealtime() {
     } catch (e) {
       setStatus('failed', e);
     }
+    scheduleWsRecovery();
   }
 
-  function connect() {
-    if (started) return;
-    started = true;
-    mode = 'ws';
-    failures = 0;
-    ws = new ManagedSocket('/api/ws', {
+  function stopRecovery() {
+    if (recoverTimer) {
+      clearInterval(recoverTimer);
+      recoverTimer = null;
+    }
+  }
+
+  /** 降级到 SSE 后，定期关掉 SSE 重新尝试 WebSocket；成功即回切。 */
+  function scheduleWsRecovery() {
+    if (recoverTimer) return;
+    recoverTimer = setInterval(() => {
+      if (!started || status === 'closed') { stopRecovery(); return; }
+      if (mode !== 'sse') { stopRecovery(); return; }
+      closeSse();
+      mode = 'ws';
+      failures = 0;
+      if (!ws) ws = createSocket();
+      ws.connect();
+    }, RECOVER_INTERVAL);
+  }
+
+  function closeSse() {
+    if (sse) {
+      try { sse.close(); } catch (e) { /* 忽略 */ }
+      sse = null;
+    }
+  }
+
+  /** 创建状态推送连接（抽出来以便降级后重建）。 */
+  function createSocket() {
+    return new ManagedSocket('/api/ws', {
       onJSON: (detail, topic, raw) => dispatch(detail, topic, raw),
       onStatus: (s) => {
-        if (mode !== 'ws') return;
         if (s === 'open') {
+          // WS 恢复：停掉 SSE 与恢复定时器，回到正常实时通道。
           failures = 0;
+          mode = 'ws';
+          closeSse();
+          stopRecovery();
           setStatus('open');
-        } else if (s === 'reconnecting' || s === 'error' || s === 'closed') {
+          return;
+        }
+        if (mode !== 'ws') return;
+        if (s === 'reconnecting' || s === 'error' || s === 'closed') {
           failures += 1;
           setStatus('reconnecting');
           if (failures >= FALLBACK_THRESHOLD) {
-            // 连续失败：关闭 WS，切换到 SSE 降级通道，页面本身不受影响
+            // 连续失败：关闭 WS，临时切到 SSE，页面本身不受影响
             mode = 'sse';
             if (ws) { ws.close(); ws = null; }
             startSSE();
@@ -244,6 +302,14 @@ function createRealtime() {
         }
       }
     });
+  }
+
+  function connect() {
+    if (started) return;
+    started = true;
+    mode = 'ws';
+    failures = 0;
+    ws = createSocket();
     setStatus('connecting');
     ws.connect();
   }
@@ -278,8 +344,9 @@ function createRealtime() {
 
   function close() {
     started = false;
+    stopRecovery();
     if (ws) { ws.close(); ws = null; }
-    if (sse) { sse.close(); sse = null; }
+    closeSse();
     subs.clear();
     statusFns.clear();
     setStatus('closed');
@@ -288,6 +355,7 @@ function createRealtime() {
   return {
     connect, close, subscribe, onStatus, clear,
     getStatus: () => status,
+    getMode: () => mode,
     send: (data) => (ws ? ws.send(data) : false)
   };
 }

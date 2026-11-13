@@ -140,20 +140,45 @@ export function render(container, context) {
     el('p', { class: 'muted', style: { marginTop: '8px' }, text: '实时推送 /api/ws，断线自动降级为 HTTP 轮询' }),
     el('p', { class: 'muted', style: { marginTop: '4px' }, text: `采样窗口：最近 ${MAX_POINTS} 个点` }));
 
-  /** 依据健康摘要刷新状态灯与模组说明。 */
-  function applyHealth(h) {
-    const o = (h && (h.data || h)) || {};
+  /**
+   * 通信状态：只反映实时通道本身（WebSocket / 降级轮询 / 离线）。
+   * 与模组数据是否可用无关 —— 两者混在一个灯上会让人误以为
+   * 「WS 断了」，这也是之前显示成「降级运行」的原因。
+   */
+  function applyComm(state) {
     const dot = connLight.querySelector('.dot');
     const label = connLight.querySelector('.status-light__label');
-    const okAll = o.status === 'ok' && o.db_ok !== false;
-    if (dot) dot.className = `dot dot--${okAll ? 'ok' : 'warning'}`;
-    if (label) label.textContent = okAll ? '已连接' : '降级运行';
+    const map = {
+      open: ['ok', 'WebSocket 就绪'],
+      'open-sse': ['warning', 'HTTP 轮询（降级）'],
+      connecting: ['warning', '连接中…'],
+      reconnecting: ['warning', '重连中…'],
+      offline: ['muted', '网络离线'],
+      closed: ['muted', '已断开'],
+      failed: ['error', '连接失败'],
+      error: ['error', '连接失败']
+    };
+    const pair = map[state] || ['muted', '未连接'];
+    if (dot) dot.className = `dot dot--${pair[0]}`;
+    if (label) label.textContent = pair[1];
+  }
+
+  /** 模组状态：只更新「模组」这一行，不碰通信指示灯。 */
+  function applyHealth(h) {
+    const o = (h && (h.data || h)) || {};
     const parts = [];
     if (o.db_ok === false) parts.push('数据库异常');
     if (o.dbus_ok === false) parts.push('D-Bus 不可用');
     if (o.ofono_ok === false) parts.push('oFono 未注册');
     else if (o.modem_ready === false) parts.push('无 Modem 对象');
     modemLine.textContent = parts.length ? parts.join(' / ') : '就绪';
+  }
+
+  // 订阅实时通道状态，页面打开即刻反映真实连接方式。
+  if (ctx.ws && typeof ctx.ws.onStatus === 'function') {
+    applyComm(ctx.ws.getStatus ? ctx.ws.getStatus() : 'connecting');
+    const offComm = ctx.ws.onStatus(applyComm);
+    if (ctx.onCleanup) ctx.onCleanup(offComm);
   }
 
   // 趋势图
@@ -276,7 +301,9 @@ export function render(container, context) {
   });
 
   loadAll();
-  ctx.interval(loadAll, 5000);
+  // 实时数据已由 WS（stats / traffic / signal）推送，HTTP 轮询只做兜底，
+  // 从 5 秒放宽到 15 秒，减少无谓请求，避免弱网下轮询与推送叠加。
+  ctx.interval(loadAll, 15000);
 }
 
 export function destroy() {

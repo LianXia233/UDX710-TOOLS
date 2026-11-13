@@ -21,13 +21,31 @@ use serde_json::Value;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, RwLock};
 use udx_domain::error::AppResult;
 use udx_domain::models::{AuditEntry, AuditSink, HealthStatus};
 use udx_domain::permissions::Principal;
 use udx_domain::state::ActionOutcome;
 use udx_platform_linux::{DbusClient, ShellExecutor};
 use udx_storage::{now_ts, Db};
+
+/// 实时指标快照。
+///
+/// `/api/ws` 原本每个连接每 2 秒自己去读 /proc、写一次 SQLite、再打好几次
+/// D-Bus —— 多开一个页面就翻一倍负载，写库还会与其它请求抢锁，表现为
+/// 推送变慢、超时、连接被浏览器判死。改为「单个后台任务采集 + 所有连接
+/// 读同一份内存快照」，开销与客户端数量无关。
+#[derive(Clone, Default)]
+pub struct MetricsSnapshot {
+    pub cpu_usage: f64,
+    pub mem_used: u64,
+    pub mem_total: u64,
+    pub temperature: Option<f64>,
+    pub traffic_total: u64,
+    pub traffic_rate: f64,
+    pub rsrp: Option<i64>,
+    pub updated_ts: i64,
+}
 
 pub struct AppServices {
     pub config: AppConfig,
@@ -48,6 +66,8 @@ pub struct AppServices {
     pub shutdown: broadcast::Sender<()>,
     /// 看门狗状态：feeder 在 runtime 内喂狗，独立 OS 线程监测假死。
     pub watchdog: Arc<WatchdogState>,
+    /// 由后台任务周期性刷新，供 WS 推送与页面复用。
+    pub metrics: Arc<RwLock<MetricsSnapshot>>,
 }
 
 impl AppServices {
@@ -106,6 +126,59 @@ impl AppServices {
         let plugin = Arc::new(PluginService::new(db.clone()));
         let proxy = Arc::new(ProxyService::new(db.clone()));
 
+        // 实时指标采集：只跑一个后台任务，所有 WS 连接读同一份内存快照。
+        // 每个连接各自采集时，一次页面刷新就可能叠加出多倍的 /proc 读取、
+        // SQLite 写入与 D-Bus 调用，造成推送延迟甚至连接被判死。
+        let metrics = Arc::new(RwLock::new(MetricsSnapshot::default()));
+        {
+            let snap = metrics.clone();
+            let net = network.clone();
+            let modem = modem.clone();
+            let mut sd = shutdown.subscribe();
+            tokio::spawn(async move {
+                let mut ticker = tokio::time::interval(Duration::from_secs(3));
+                ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+                let mut last_total: u64 = 0;
+                let mut last_at = Instant::now();
+                loop {
+                    tokio::select! {
+                        _ = ticker.tick() => {}
+                        _ = sd.recv() => break,
+                    }
+                    let mut next = MetricsSnapshot::default();
+                    if let Ok(info) = net.system_info(env!("CARGO_PKG_VERSION")).await {
+                        next.cpu_usage = info
+                            .get("cpu_usage")
+                            .and_then(|v| v.as_f64())
+                            .unwrap_or(0.0);
+                        next.mem_used = info.get("mem_used").and_then(|v| v.as_u64()).unwrap_or(0);
+                        next.mem_total =
+                            info.get("mem_total").and_then(|v| v.as_u64()).unwrap_or(0);
+                        next.temperature = info.get("temperature").and_then(|v| v.as_f64());
+                    }
+                    if let Ok(t) = net.traffic_total().await {
+                        let total = t.get("total").and_then(|v| v.as_u64()).unwrap_or(0);
+                        let now = Instant::now();
+                        let dt = now.duration_since(last_at).as_secs_f64().max(0.001);
+                        // total 回落说明设备重启，速率归零重新计。
+                        next.traffic_rate = if last_total == 0 || total < last_total {
+                            0.0
+                        } else {
+                            (total - last_total) as f64 / dt
+                        };
+                        next.traffic_total = total;
+                        last_total = total;
+                        last_at = now;
+                    }
+                    if let Ok(b) = modem.current_band().await {
+                        next.rsrp = b.get("rsrp").and_then(|v| v.as_i64());
+                    }
+                    next.updated_ts = now_ts();
+                    *snap.write().await = next;
+                }
+            });
+        }
+
         // 周期性维护：清理过期 Token；跳过堆积 tick，避免重入。
         let db_maint = db.clone();
         let maintenance = move || {
@@ -138,6 +211,7 @@ impl AppServices {
             started_at: Instant::now(),
             shutdown,
             watchdog,
+            metrics,
         }))
     }
 
