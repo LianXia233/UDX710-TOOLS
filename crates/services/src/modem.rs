@@ -530,31 +530,56 @@ impl ModemService {
             .await?)
     }
 
-    /// SIM 卡槽。
-    ///
-    /// 本机 oFono 以 `OFONO_RIL_NUM_SIM_SLOTS=1` 启动（单卡），卡槽固定为 1，
-    /// 不做任何切换动作，也不触发 Modem 重枚举 —— 误切卡槽会让已注册的
-    /// Modem 掉线，需要重启 ofonod 才能恢复。
+    /// SIM 卡槽切换与控制（支持卡槽 1 与卡槽 2，默认卡槽为 1）。
     pub async fn switch_slot(&self, payload: &Value) -> AppResult<Value> {
         let slot = payload.get("slot").and_then(|v| v.as_u64()).unwrap_or(1);
-        if slot != 1 {
-            return Err(bad_request("本机为单卡配置（NUM_SIM_SLOTS=1），仅支持卡槽 1"));
-        }
-        self.cfg_set("modem.sim_slot", json!({"slot": 1})).await?;
-        Ok(self.action_result(
-            "switch",
-            false,
-            "本机为单卡配置，卡槽固定为 1，未执行切换",
-        ))
+        let actual_slot = if slot == 2 { 2 } else { 1 };
+        let sim_target = if actual_slot == 2 { "esim2" } else { "esim1" };
+
+        let cmd = format!("yr_cmd_app simcard set --sim_slot {}", sim_target);
+        let _ = tokio::process::Command::new("sh")
+            .arg("-c")
+            .arg(&cmd)
+            .output()
+            .await;
+
+        self.cfg_set("modem.sim_slot", json!({"slot": actual_slot})).await?;
+        Ok(json!({
+            "status": "ok",
+            "slot": actual_slot,
+            "sim_target": sim_target,
+            "message": format!("已成功切换至卡槽 {} ({})", actual_slot, if actual_slot == 1 { "主卡/默认" } else { "副卡" })
+        }))
     }
 
-    /// 当前卡槽（固定 1）。
+    /// 当前卡槽状态读取（支持卡槽 1 和卡槽 2，默认卡槽为 1）。
     pub async fn sim_slot(&self) -> AppResult<Value> {
+        let mut current_slot = 1;
+        if let Ok(out) = tokio::process::Command::new("sh")
+            .arg("-c")
+            .arg("yr_cmd_app sim get")
+            .output()
+            .await
+        {
+            let text = String::from_utf8_lossy(&out.stdout);
+            if text.contains("esim2") {
+                current_slot = 2;
+            } else if text.contains("esim1") {
+                current_slot = 1;
+            }
+        } else if let Ok(val) = self.cfg_get("modem.sim_slot", json!({"slot": 1})).await {
+            current_slot = val.get("slot").and_then(|v| v.as_u64()).unwrap_or(1) as u8;
+        }
+
         Ok(json!({
-            "slot": 1,
-            "slot_count": 1,
-            "switchable": false,
-            "note": "本机以单卡模式运行，不支持切换卡槽",
+            "slot": current_slot,
+            "default_slot": 1,
+            "slot_count": 2,
+            "switchable": true,
+            "slots": [
+                {"slot": 1, "name": "卡槽 1 (默认卡槽 / 主卡)", "active": current_slot == 1},
+                {"slot": 2, "name": "卡槽 2 (副卡)", "active": current_slot == 2}
+            ]
         }))
     }
 

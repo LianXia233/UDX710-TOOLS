@@ -301,7 +301,8 @@ function setConnection(status) {
   const label = document.getElementById('conn-label');
   const map = {
     open: ['ok', i18n.t('app.online')],
-    'open-sse': ['warning', 'HTTP 轮询（降级）'],
+    'open-sse': ['ok', '在线'],
+    idle: ['warning', i18n.t('app.connecting')],
     connecting: ['warning', i18n.t('app.connecting')],
     reconnecting: ['warning', i18n.t('app.connecting')],
     offline: ['muted', '网络离线'],

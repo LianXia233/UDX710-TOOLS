@@ -10,11 +10,24 @@
  */
 import * as auth from './auth.js';
 
+export function toWebSocketUrl(rawUrl) {
+  if (typeof window === 'undefined') return rawUrl;
+  let url = rawUrl;
+  if (!url.startsWith('ws://') && !url.startsWith('wss://')) {
+    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = window.location.host;
+    const path = url.startsWith('/') ? url : `/${url}`;
+    url = `${proto}//${host}${path}`;
+  }
+  return url;
+}
+
 function tokenQuery(url) {
   const token = auth.getToken();
-  if (!token) return url;
-  const sep = url.includes('?') ? '&' : '?';
-  return `${url}${sep}token=${encodeURIComponent(token)}`;
+  const absoluteUrl = toWebSocketUrl(url);
+  if (!token) return absoluteUrl;
+  const sep = absoluteUrl.includes('?') ? '&' : '?';
+  return `${absoluteUrl}${sep}token=${encodeURIComponent(token)}`;
 }
 
 export class ManagedSocket {
@@ -39,11 +52,15 @@ export class ManagedSocket {
   }
 
   _buildUrl() {
-    return this.options.withToken ? tokenQuery(this.url) : this.url;
+    const raw = this.options.withToken ? tokenQuery(this.url) : this.url;
+    return toWebSocketUrl(raw);
   }
 
   _setStatus(status, detail) {
     this._status = status;
+    if (typeof this.options.onStatus === 'function') {
+      try { this.options.onStatus(status, detail); } catch (e) { /* 选项回调异常隔离 */ }
+    }
     for (const fn of Array.from(this._statusFns)) {
       try { fn(status, detail); } catch (e) { /* 订阅者异常隔离 */ }
     }

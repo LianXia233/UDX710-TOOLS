@@ -506,7 +506,30 @@ impl NetworkService {
     }
 
     pub async fn apn_templates_list(&self) -> AppResult<Value> {
-        Ok(json!({"templates": self.db.entity_list(Entity::ApnTemplate).await?}))
+        let list = self.db.entity_list(Entity::ApnTemplate).await?;
+        if list.is_empty() {
+            let presets = vec![
+                json!({"id": "1", "name": "中国移动 (CMNET - 5G/4G通用)", "apn": "cmnet", "username": "", "password": "", "auth_type": "none", "protocol": "dual"}),
+                json!({"id": "2", "name": "中国移动 物联网卡 (CMIOT)", "apn": "cmiot", "username": "", "password": "", "auth_type": "none", "protocol": "dual"}),
+                json!({"id": "3", "name": "中国联通 (3GNET - 5G/4G通用)", "apn": "3gnet", "username": "", "password": "", "auth_type": "none", "protocol": "dual"}),
+                json!({"id": "4", "name": "中国联通 物联网卡 (WONET)", "apn": "wonet", "username": "", "password": "", "auth_type": "none", "protocol": "dual"}),
+                json!({"id": "5", "name": "中国电信 (CTNET - 5G/4G通用)", "apn": "ctnet", "username": "ctnet@myhsp.org", "password": "vnet.mobi", "auth_type": "pap", "protocol": "dual"}),
+                json!({"id": "6", "name": "中国广电 5G (CBNET)", "apn": "cbnet", "username": "", "password": "", "auth_type": "none", "protocol": "dual"}),
+                json!({"id": "7", "name": "通用互联网 APN (INTERNET)", "apn": "internet", "username": "", "password": "", "auth_type": "none", "protocol": "dual"}),
+            ];
+            for p in &presets {
+                if let Some(id) = p.get("id").and_then(|v| v.as_str()) {
+                    let _ = self.db.entity_upsert(Entity::ApnTemplate, id, p).await;
+                }
+            }
+            if let Ok(updated) = self.db.entity_list(Entity::ApnTemplate).await {
+                if !updated.is_empty() {
+                    return Ok(json!({"templates": updated}));
+                }
+            }
+            return Ok(json!({"templates": presets}));
+        }
+        Ok(json!({"templates": list}))
     }
 
     pub async fn apn_template_create(&self, payload: &Value) -> AppResult<Value> {

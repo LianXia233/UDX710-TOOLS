@@ -64,7 +64,7 @@ export function render(container, context) {
   const regRef = {};
   const regCard = ctx.card({
     title: '网络注册与 SIM 卡状态',
-    subtitle: '移动网络注册状态、卡槽在位检测与无线网络控制',
+    subtitle: '移动网络注册状态、双卡槽物理切换与无线网络控制',
     span: 6,
     icon: 'shield'
   });
@@ -73,6 +73,66 @@ export function render(container, context) {
     'SIM 卡在位状态', '信号强度百分比', '当前卡槽', '漫游状态'
   ];
   for (const l of regLabels) regCard.body.appendChild(kv(l, regRef));
+
+  // 卡槽物理切换控制组件 (支持卡槽 1 与卡槽 2，默认卡槽为 1)
+  const slotWrap = el('div', {
+    class: 'sim-slot-ctrl',
+    style: {
+      marginTop: '12px',
+      padding: '10px 14px',
+      borderRadius: 'var(--radius-sm)',
+      background: 'var(--surface-2)',
+      border: '1px solid var(--border)',
+      boxShadow: '2px 2px 0 rgba(24, 54, 83, 0.05)'
+    }
+  });
+
+  const slotHeader = el('div', {
+    class: 'row',
+    style: { justifyContent: 'space-between', marginBottom: '8px' }
+  },
+    el('span', { style: { fontSize: '12px', fontWeight: '750', color: 'var(--text)' }, text: 'SIM 卡槽物理切换' }),
+    el('span', { class: 'badge badge--ok', text: '默认: 卡槽 1' })
+  );
+
+  let activeSlot = 1;
+  const slot1Btn = button('卡槽 1 (默认主卡)', {
+    variant: 'primary sm',
+    icon: 'check',
+    onClick: () => doSwitchSlot(1)
+  });
+  const slot2Btn = button('卡槽 2 (副卡)', {
+    variant: 'ghost sm',
+    onClick: () => doSwitchSlot(2)
+  });
+
+  const slotBtnRow = el('div', { class: 'row', style: { gap: '8px' } }, slot1Btn, slot2Btn);
+  slotWrap.append(slotHeader, slotBtnRow);
+  regCard.body.appendChild(slotWrap);
+
+  async function doSwitchSlot(targetSlot) {
+    if (targetSlot === activeSlot) {
+      ctx.toast.info(`当前已处于卡槽 ${targetSlot}`);
+      return;
+    }
+    const ok = await ctx.confirm({
+      title: '切换 SIM 卡槽',
+      message: `确定将工作卡槽切换为「卡槽 ${targetSlot} (${targetSlot === 1 ? '默认主卡' : '副卡'})」吗？通信模组将进行射频硬件重选并重新注网。`,
+      danger: targetSlot !== 1
+    });
+    if (!ok) return;
+    try {
+      await ctx.api('/api/switch', {
+        method: 'POST',
+        body: { slot: targetSlot },
+        signal: ctx.signal
+      });
+      ctx.toast.success(`已成功切换至卡槽 ${targetSlot}，正在重新注网…`);
+      load();
+    } catch (e) {
+      ctx.toast.error(ctx.t('common.requestFailed'));
+    }
+  }
 
   grid.append(infoCard.el, regCard.el);
 
@@ -114,11 +174,22 @@ export function render(container, context) {
 
   async function load() {
     try {
-      const [info, band, cells] = await Promise.all([
+      const [info, band, cells, slotRes] = await Promise.all([
         ctx.api('/api/info', { signal: ctx.signal }),
         ctx.api('/api/current_band', { signal: ctx.signal }).catch(() => null),
-        ctx.api('/api/cells', { signal: ctx.signal }).catch(() => null)
+        ctx.api('/api/cells', { signal: ctx.signal }).catch(() => null),
+        ctx.api('/api/switch', { signal: ctx.signal }).catch(() => null)
       ]);
+
+      const curSlot = Number(fieldOf(slotRes, 'slot', 1)) || 1;
+      activeSlot = curSlot;
+      if (curSlot === 2) {
+        slot1Btn.className = 'btn btn--ghost btn--sm';
+        slot2Btn.className = 'btn btn--primary btn--sm';
+      } else {
+        slot1Btn.className = 'btn btn--primary btn--sm';
+        slot2Btn.className = 'btn btn--ghost btn--sm';
+      }
 
       const i = fieldOf(info, 'data', info) || {};
       setRef(infoRef, '设备型号', fieldOf(i, 'model', fieldOf(i, 'modem_model', 'UDX710 5G Baseband')));
@@ -171,9 +242,9 @@ export function render(container, context) {
       setRef(regRef, '下行频点 (ARFCN)', arfcn != null ? arfcn : '—');
       setRef(regRef, '物理小区 (PCI)', pci != null ? pci : '—');
       setRef(regRef, '网络注册状态', fieldOf(b, 'registration') === 'registered' ? '已注册网络 (Home Network)' : safeText(fieldOf(b, 'registration', '已注册')));
-      setRef(regRef, 'SIM 卡在位状态', fieldOf(b, 'sim_present', true) ? '卡槽 1 在位 (正常在线)' : '未检测到 SIM 卡');
+      setRef(regRef, 'SIM 卡在位状态', fieldOf(b, 'sim_present', true) ? `卡槽 ${activeSlot} 在位 (正常在线)` : '未检测到 SIM 卡');
       setRef(regRef, '信号强度百分比', strength != null ? `${strength}% (良好)` : (Number.isFinite(numRsrp) ? `${Math.round(((numRsrp + 140) / 96) * 100)}%` : '—'));
-      setRef(regRef, '当前卡槽', '卡槽 1 (单卡固定模式)');
+      setRef(regRef, '当前卡槽', activeSlot === 2 ? '卡槽 2 (副卡在用)' : '卡槽 1 (默认主卡在用)');
       setRef(regRef, '漫游状态', '本地网络 (非漫游)');
 
       // 更新小区表
